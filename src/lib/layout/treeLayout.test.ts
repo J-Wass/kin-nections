@@ -212,7 +212,7 @@ describe('computeFocusedLayout', () => {
     assertNoOverlap(layout)
   })
 
-  it('places the focus person exactly at x=0 (translated center)', () => {
+  it('places an edge-branch focus person near the horizontal center of the graph', () => {
     let tree = createEmptyTree('t', 'T')
     for (const id of ['gp1', 'gp2', 'me', 'bigSibling']) tree = person(tree, id)
     tree = setParents(tree, 'me', ['gp1', 'gp2'])
@@ -224,6 +224,9 @@ describe('computeFocusedLayout', () => {
 
     const layout = computeFocusedLayout(tree, 'me')
     expect(layout.people.me.x).toBe(0)
+    const xs = Object.values(layout.people).map((node) => node.x)
+    const graphMidpoint = (Math.min(...xs) + Math.max(...xs)) / 2
+    expect(Math.abs(layout.people.me.x - graphMidpoint)).toBeLessThanOrEqual(NODE_SPACING_X / 2)
     assertNoOverlap(layout)
   })
 

@@ -245,32 +245,69 @@ function findConnectedComponent(tree: Tree, startId: string): Set<string> {
   return visited
 }
 
-/** Lays out the tree re-centered around a single focus person. Ancestors end up
- * above them and descendants below (oldest-on-top is already true of the general
- * layout's generation rows), and only the focus person's own connected relatives are
- * shown — a focused view has no sensible position for an unrelated, unconnected
- * branch elsewhere in the same tree.
- *
- * This reuses the general layout's own centering (rather than re-deriving positions
- * from scratch relative to the focus person) because correctly centering an ancestor
- * couple over *both* of their own parents' further ancestries — not just one side —
- * is a genuine two-sided pedigree fork, and a from-scratch version of that turned out
- * to silently drop one parent's whole ancestry while still drawing an edge to it,
- * scattering lines with no real anchor. The general layout already handles arbitrary
- * two-parent structures correctly, so translating its output is the robust choice. */
+/** Lays out the connected family around a single focus person. The general layout
+ * supplies stable generation and left-to-right ordering, then each generation is
+ * centered around the focus household. On the focus row, the focus person and their
+ * spouses form the central block; other people on that row are balanced around it.
+ * This keeps the selected person near the visual center even when they occupied an
+ * outside branch in the root-oriented layout. */
 export function computeFocusedLayout(tree: Tree, focusPersonId: string): TreeLayout {
   const full = computeLayout(tree)
   const focusNode = full.people[focusPersonId]
   if (!focusNode) return { people: {}, families: {}, width: 0, height: 0 }
 
   const connected = findConnectedComponent(tree, focusPersonId)
-
   const people: Record<string, LayoutNode> = {}
+
   for (const [id, node] of Object.entries(full.people)) {
     if (!connected.has(id)) continue
-    people[id] = { ...node, x: node.x - focusNode.x, generation: node.generation - focusNode.generation }
+    const generation = node.generation - focusNode.generation
+    people[id] = { ...node, generation, y: generation * GENERATION_SPACING_Y }
   }
-  for (const node of Object.values(people)) node.y = node.generation * GENERATION_SPACING_Y
+
+  const rows = new Map<number, LayoutNode[]>()
+  for (const node of Object.values(people)) {
+    const row = rows.get(node.generation) ?? []
+    row.push(node)
+    rows.set(node.generation, row)
+  }
+
+  const focusRow = rows.get(0) ?? []
+  const spouseIds = new Set(
+    getSpousesOf(tree, focusPersonId)
+      .map((spouse) => spouse.person.id)
+      .filter((id) => people[id]?.generation === 0),
+  )
+  const spouses = focusRow.filter((node) => spouseIds.has(node.id)).sort((a, b) => a.x - b.x)
+  const spouseSplit = Math.floor(spouses.length / 2)
+  const focusBlock = [
+    ...spouses.slice(0, spouseSplit),
+    people[focusPersonId],
+    ...spouses.slice(spouseSplit),
+  ]
+  const others = focusRow
+    .filter((node) => node.id !== focusPersonId && !spouseIds.has(node.id))
+    .sort((a, b) => a.x - b.x)
+  const otherSplit = Math.floor(others.length / 2)
+  const orderedFocusRow = [...others.slice(0, otherSplit), ...focusBlock, ...others.slice(otherSplit)]
+
+  function placeCenteredRow(row: LayoutNode[], centerX: number): void {
+    const startX = centerX - ((row.length - 1) * NODE_SPACING_X) / 2
+    row.forEach((node, index) => {
+      node.x = startX + index * NODE_SPACING_X
+    })
+  }
+
+  placeCenteredRow(orderedFocusRow, 0)
+  const focusOffset = people[focusPersonId].x
+  for (const node of orderedFocusRow) node.x -= focusOffset
+
+  const householdCenter =
+    focusBlock.reduce((sum, node) => sum + node.x, 0) / Math.max(focusBlock.length, 1)
+  for (const [generation, row] of rows) {
+    if (generation === 0) continue
+    placeCenteredRow(row.sort((a, b) => a.x - b.x), householdCenter)
+  }
 
   let minX = 0
   let maxX = 0

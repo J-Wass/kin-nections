@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Tree } from '../lib/model/types'
-  import { computeFocusedLayout, computeLayout, GENERATION_SPACING_Y, NODE_SPACING_X } from '../lib/layout/treeLayout'
+  import { computeFocusedLayout, computeLayout } from '../lib/layout/treeLayout'
   import { describeAllRelationships } from '../lib/relationship/kinship'
   import { scrollToRequest } from '../lib/stores/appState'
   import NodeCard from './NodeCard.svelte'
@@ -28,8 +28,24 @@
   const layout = $derived(povPersonId ? computeFocusedLayout(tree, povPersonId) : computeLayout(tree))
   const povLabels = $derived(povPersonId ? describeAllRelationships(tree, povPersonId) : null)
 
-  const contentWidth = $derived(layout.width + PADDING * 2)
-  const contentHeight = $derived(layout.height + PADDING * 2)
+  const fitBounds = $derived.by(() => {
+    const nodes = Object.values(layout.people)
+    if (nodes.length === 0) return { x: 0, y: 0, w: 1000, h: 700 }
+
+    const minX = Math.min(...nodes.map((node) => node.x))
+    const minY = Math.min(...nodes.map((node) => node.y))
+    const maxX = Math.max(...nodes.map((node) => node.x + NODE_WIDTH))
+    const maxY = Math.max(...nodes.map((node) => node.y + NODE_HEIGHT))
+
+    return {
+      x: minX,
+      y: minY,
+      w: maxX - minX + PADDING * 2,
+      h: maxY - minY + PADDING * 2,
+    }
+  })
+  const contentWidth = $derived(fitBounds.w)
+  const contentHeight = $derived(fitBounds.h)
 
   let viewBox = $state({ x: 0, y: 0, w: 1000, h: 700 })
   let containerEl: HTMLDivElement | undefined = $state()
@@ -51,7 +67,7 @@
     if (povPersonId && layout.people[povPersonId]) {
       centerOn(layout.people[povPersonId], ZOOM_WIDTH, ZOOM_HEIGHT)
     } else {
-      viewBox = { x: 0, y: 0, w: contentWidth, h: contentHeight }
+      viewBox = { ...fitBounds }
     }
   })
 
@@ -107,7 +123,7 @@
   }
 
   function resetView() {
-    viewBox = { x: 0, y: 0, w: contentWidth, h: contentHeight }
+    viewBox = { ...fitBounds }
   }
 
   function nodeX(personId: string): number {
