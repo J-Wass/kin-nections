@@ -18,7 +18,7 @@ npm run check    # svelte-check + TypeScript
 
 ## Deployment
 
-Pushing to `main` builds the site and publishes it to GitHub Pages via `.github/workflows/deploy.yml`. In the repo's Settings → Pages, set the source to **GitHub Actions**.
+Pushing to `main` builds the site and publishes it to GitHub Pages via `.github/workflows/deploy.yml`. In the repo's **Settings → Pages → Build and deployment**, set **Source** to **GitHub Actions**. Do not use **Deploy from a branch**: that publishes the uncompiled Vite source and leaves the app blank.
 
 `vite.config.ts` sets the production `base` to `/kin-nections/` for GitHub Pages project-site routing. If you push this to a repo with a different name, update that path to match (or to `/` for a user/org page or custom domain).
 
