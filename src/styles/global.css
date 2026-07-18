@@ -1,0 +1,112 @@
+:root {
+  color-scheme: light dark;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-hover: #eef0f3;
+  --border: #d7dbe0;
+  --fg: #1a1d21;
+  --fg-muted: #626972;
+  --input-bg: #ffffff;
+
+  --accent: #3f6fd6;
+  --accent-fg: #ffffff;
+  --accent-ring: rgba(63, 111, 214, 0.25);
+  --focus-ring: #3f6fd6;
+
+  --danger: #c0392b;
+  --danger-bg-hover: #fbeae8;
+  --success: #1f8a4c;
+
+  --canvas-bg: #eef1f5;
+  --edge: #97a1ad;
+  --edge-divorced: #c0392b;
+  --edge-unknown: #97a1ad;
+
+  --node-fg: #1a1d21;
+  --male-border: #6f9ceb;
+  --male-bg: #eaf1fd;
+  --female-border: #e08bb0;
+  --female-bg: #fdecf3;
+  --unknown-border: #a8adb5;
+  --unknown-bg: #f1f2f4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181c;
+    --surface: #1f2226;
+    --surface-hover: #282c31;
+    --border: #383d44;
+    --fg: #eef0f2;
+    --fg-muted: #9aa1a9;
+    --input-bg: #14161a;
+
+    --accent: #6f9ceb;
+    --accent-fg: #0c1622;
+    --accent-ring: rgba(111, 156, 235, 0.3);
+    --focus-ring: #6f9ceb;
+
+    --danger: #e57368;
+    --danger-bg-hover: #3a2220;
+    --success: #4fbf7d;
+
+    --canvas-bg: #101215;
+    --edge: #5b626b;
+    --edge-divorced: #e57368;
+    --edge-unknown: #5b626b;
+
+    --node-fg: #eef0f2;
+    --male-border: #6f9ceb;
+    --male-bg: #1c2733;
+    --female-border: #e08bb0;
+    --female-bg: #2c1f28;
+    --unknown-border: #6b7178;
+    --unknown-bg: #24272b;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+}
+
+#app {
+  height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button {
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--fg);
+}
