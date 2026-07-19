@@ -8,10 +8,10 @@
     getSiblingsOf,
     getSpousesOf,
     markDivorced,
-    removeChildFromFamily,
     setParents,
   } from '../lib/model/treeOps'
   import { applyMutation } from '../lib/stores/appState'
+  import { formatPersonName } from '../lib/model/personDisplay'
   import { t } from '../lib/i18n'
 
   interface Props {
@@ -28,16 +28,42 @@
   const spouses = $derived(getSpousesOf(tree, personId))
 
   const otherPeople = $derived(Object.values(tree.people).filter((p) => p.id !== personId))
+  const ancestorIds = $derived.by(() => collectRelativeIds(personId, (id) => getParentsOf(tree, id).map((person) => person.id)))
+  const descendantIds = $derived.by(() => collectRelativeIds(personId, (id) => getChildrenOf(tree, id).map((person) => person.id)))
+  const parentOptions = $derived(otherPeople.filter((person) =>
+    !parents.some((parent) => parent.id === person.id) && !descendantIds.has(person.id)))
+  const childOptions = $derived(otherPeople.filter((person) => {
+    if (children.some((child) => child.id === person.id) || ancestorIds.has(person.id)) return false
+    const existingParents = getParentsOf(tree, person.id)
+    return existingParents.length < 2 || existingParents.some((parent) => parent.id === personId)
+  }))
+  const spouseOptions = $derived(otherPeople.filter((person) =>
+    !spouses.some((spouse) => spouse.person.id === person.id)))
+  const siblingOptions = $derived(otherPeople.filter((person) =>
+    !siblings.some((sibling) => sibling.id === person.id)))
 
   let parentPick = $state('')
   let childPick = $state('')
   let spousePick = $state('')
   let siblingPick = $state('')
 
+  function collectRelativeIds(startId: string, neighbors: (id: string) => string[]): Set<string> {
+    const found = new Set<string>()
+    const queue = [startId]
+    while (queue.length > 0) {
+      for (const id of neighbors(queue.shift()!)) {
+        if (found.has(id)) continue
+        found.add(id)
+        queue.push(id)
+      }
+    }
+    return found
+  }
+
   function personLabel(id: string): string {
     const p = tree.people[id]
     if (!p) return id
-    return p.isPlaceholder ? 'Unknown' : `${p.firstName} ${p.lastName}`.trim() || 'Unnamed'
+    return formatPersonName(p)
   }
 
   function addParent() {
@@ -49,7 +75,10 @@
 
   function addChild() {
     if (!childPick) return
-    applyMutation((current) => setParents(current, childPick, [personId]))
+    applyMutation((current) => {
+      const parentIds = [...new Set([...getParentsOf(current, childPick).map((parent) => parent.id), personId])]
+      return setParents(current, childPick, parentIds)
+    })
     childPick = ''
   }
 
@@ -70,19 +99,15 @@
   }
 
   function removeParent(parentId: string) {
-    const family = Object.values(tree.families).find(
-      (f) => f.children.includes(personId) && f.partners.some((p) => p.personId === parentId),
-    )
-    if (!family) return
-    applyMutation((current) => removeChildFromFamily(current, family.id, personId))
+    const remainingParentIds = parents.filter((parent) => parent.id !== parentId).map((parent) => parent.id)
+    applyMutation((current) => setParents(current, personId, remainingParentIds))
   }
 
   function removeChild(childId: string) {
-    const family = Object.values(tree.families).find(
-      (f) => f.children.includes(childId) && f.partners.some((p) => p.personId === personId),
-    )
-    if (!family) return
-    applyMutation((current) => removeChildFromFamily(current, family.id, childId))
+    const remainingParentIds = getParentsOf(tree, childId)
+      .filter((parent) => parent.id !== personId)
+      .map((parent) => parent.id)
+    applyMutation((current) => setParents(current, childId, remainingParentIds))
   }
 </script>
 
@@ -103,7 +128,7 @@
       <div class="add-row">
         <select bind:value={parentPick}>
           <option value="">{$t('relationship.addParent')}</option>
-          {#each otherPeople as p (p.id)}
+          {#each parentOptions as p (p.id)}
             <option value={p.id}>{personLabel(p.id)}</option>
           {/each}
         </select>
@@ -127,7 +152,7 @@
     <div class="add-row">
       <select bind:value={childPick}>
         <option value="">{$t('relationship.addChild')}</option>
-        {#each otherPeople as p (p.id)}
+        {#each childOptions as p (p.id)}
           <option value={p.id}>{personLabel(p.id)}</option>
         {/each}
       </select>
@@ -157,7 +182,7 @@
     <div class="add-row">
       <select bind:value={spousePick}>
         <option value="">{$t('relationship.addSpouse')}</option>
-        {#each otherPeople as p (p.id)}
+        {#each spouseOptions as p (p.id)}
           <option value={p.id}>{personLabel(p.id)}</option>
         {/each}
       </select>
@@ -180,7 +205,7 @@
       <div class="add-row">
         <select bind:value={siblingPick}>
           <option value="">{$t('relationship.addSibling')}</option>
-          {#each otherPeople as p (p.id)}
+          {#each siblingOptions as p (p.id)}
             <option value={p.id}>{personLabel(p.id)}</option>
           {/each}
         </select>

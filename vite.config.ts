@@ -9,6 +9,9 @@ export default defineConfig(({ command, isPreview }) => ({
   // dist/index.html still references '/kin-nections/', breaking every asset URL.
   base: command === 'build' || isPreview ? '/kin-nections/' : '/',
   plugins: [svelte()],
+  resolve: {
+    conditions: ['browser'],
+  },
   test: {
     environment: 'jsdom',
     globals: true,

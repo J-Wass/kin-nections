@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { Tree } from '../lib/model/types'
   import { addPerson, removePerson, updatePerson } from '../lib/model/treeOps'
-  import { applyMutation, povPersonId, requestScrollToPerson, selectedPersonId } from '../lib/stores/appState'
+  import { applyMutation, focusPerson, selectedPersonId } from '../lib/stores/appState'
+  import { formatPersonName } from '../lib/model/personDisplay'
   import { t } from '../lib/i18n'
+  import Eye from '@lucide/svelte/icons/eye'
   import RelationshipEditor from './RelationshipEditor.svelte'
 
   interface Props {
@@ -14,6 +16,7 @@
   let { tree, personId, onClose }: Props = $props()
 
   const person = $derived(tree.people[personId])
+  const displayName = $derived(person ? formatPersonName(person) : '')
 
   function update(field: string, value: string | boolean) {
     applyMutation((current) => updatePerson(current, personId, { [field]: value } as never))
@@ -35,25 +38,26 @@
     })
   }
 
-  function scrollToThis() {
-    requestScrollToPerson(personId)
-  }
-
   function focusThis() {
-    povPersonId.set(personId)
+    focusPerson(personId)
   }
 </script>
 
 {#if person}
   <div class="panel">
     <header class="panel-header">
-      <h2>{$t('person.editPerson')}</h2>
+      <div class="panel-title">
+        <span class="panel-context">{$t('person.editPerson')}</span>
+        <h2>{displayName}</h2>
+      </div>
       <button type="button" class="icon-btn" onclick={onClose} aria-label={$t('common.close')}>×</button>
     </header>
 
     <div class="quick-actions">
-      <button type="button" onclick={scrollToThis}>{$t('pov.scrollTo')}</button>
-      <button type="button" onclick={focusThis}>{$t('pov.focus')}</button>
+      <button type="button" onclick={focusThis}>
+        <Eye size={16} aria-hidden="true" />
+        <span>{$t('pov.focus')}</span>
+      </button>
     </div>
 
     <div class="panel-body">
@@ -152,14 +156,30 @@
 
   .panel-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
+    gap: 1rem;
     padding: 1rem 1.25rem;
     border-bottom: 1px solid var(--border);
   }
+  .panel-title {
+    min-width: 0;
+  }
+  .panel-context {
+    display: block;
+    margin-bottom: 0.3rem;
+    color: var(--fg-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
   .panel-header h2 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 1.75rem;
+    line-height: 1.1;
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
   }
 
   .icon-btn {
@@ -170,6 +190,7 @@
     cursor: pointer;
     color: var(--fg-muted);
     padding: 0.25rem;
+    flex-shrink: 0;
   }
   .icon-btn:hover {
     color: var(--fg);
@@ -182,6 +203,9 @@
     border-bottom: 1px solid var(--border);
   }
   .quick-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
     font: inherit;
     font-size: 0.8rem;
     padding: 0.35rem 0.65rem;

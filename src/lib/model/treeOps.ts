@@ -13,6 +13,23 @@ function clone(tree: Tree): Tree {
   }
 }
 
+function requirePerson(tree: Tree, personId: string): void {
+  if (!tree.people[personId]) throw new Error(`Person not found: ${personId}`)
+}
+
+function wouldCreateAncestryCycle(tree: Tree, parentId: string, childId: string): boolean {
+  const visited = new Set<string>()
+  const queue = [childId]
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    if (current === parentId) return true
+    if (visited.has(current)) continue
+    visited.add(current)
+    queue.push(...getChildrenOf(tree, current).map((person) => person.id))
+  }
+  return false
+}
+
 let idCounter = 0
 export function generateId(prefix: string): string {
   idCounter += 1
@@ -134,17 +151,39 @@ function findFamilyByPartners(tree: Tree, partnerIds: string[]): Family | undefi
   )
 }
 
-/** Ensures a family exists linking childId to the given parent(s), creating or reusing
- * one as needed, then adds the child to it. Supports 1 or 2 parents. */
+/** Replaces a person's parent membership. The child is detached from every previous
+ * parent family, then attached to the requested 0, 1, or 2 parents. */
 export function setParents(tree: Tree, childId: string, parentIds: string[]): Tree {
-  if (parentIds.length < 1 || parentIds.length > 2) {
-    throw new Error('setParents requires 1 or 2 parent ids')
+  requirePerson(tree, childId)
+  const uniqueParentIds = [...new Set(parentIds)]
+  if (uniqueParentIds.length !== parentIds.length || uniqueParentIds.length > 2) {
+    throw new Error('setParents requires 0 to 2 unique parent ids')
   }
-  let family = findFamilyByPartners(tree, parentIds)
-  let working = tree
+  for (const parentId of uniqueParentIds) {
+    requirePerson(tree, parentId)
+    if (wouldCreateAncestryCycle(tree, parentId, childId)) {
+      throw new Error('Parent relationship would create an ancestry cycle')
+    }
+  }
+
+  let working = clone(tree)
+  for (const family of Object.values(working.families)) {
+    if (!family.children.includes(childId)) continue
+    const children = family.children.filter((id) => id !== childId)
+    if (children.length === 0 && family.partners.length < 2) {
+      delete working.families[family.id]
+    } else {
+      working.families[family.id] = { ...family, children }
+    }
+  }
+  touch(working)
+
+  if (uniqueParentIds.length === 0) return working
+
+  let family = findFamilyByPartners(working, uniqueParentIds)
   if (!family) {
     const created = createFamily(working, {
-      partners: parentIds.map((personId) => ({ personId, role: 'spouse' as const })),
+      partners: uniqueParentIds.map((personId) => ({ personId, role: 'spouse' as const })),
     })
     working = created.tree
     family = created.family
@@ -159,6 +198,9 @@ export function addSpouse(
   personBId: string,
   status: FamilyStatus = 'married',
 ): { tree: Tree; family: Family } {
+  requirePerson(tree, personAId)
+  requirePerson(tree, personBId)
+  if (personAId === personBId) throw new Error('A person cannot be their own spouse')
   const existing = findFamilyByPartners(tree, [personAId, personBId])
   if (existing) {
     const next = updateFamilyStatus(tree, existing.id, status)
@@ -183,6 +225,9 @@ export function markDivorced(tree: Tree, personAId: string, personBId: string): 
 /** Adds a sibling relationship between two people. Reuses an existing shared family if
  * one of them already belongs to one; otherwise creates a parents-unknown family. */
 export function addSibling(tree: Tree, personId: string, siblingId: string): Tree {
+  requirePerson(tree, personId)
+  requirePerson(tree, siblingId)
+  if (personId === siblingId) throw new Error('A person cannot be their own sibling')
   const personFamilies = findFamiliesAsChild(tree, personId)
   const siblingFamilies = findFamiliesAsChild(tree, siblingId)
 

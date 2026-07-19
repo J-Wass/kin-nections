@@ -1,23 +1,24 @@
 <script lang="ts">
-  import type { Tree } from '../lib/model/types'
-  import { computeFocusedLayout, computeLayout } from '../lib/layout/treeLayout'
+  import type { Family, Tree } from '../lib/model/types'
+  import { computeFocusedLayout, computeLayout, NODE_HEIGHT, NODE_WIDTH } from '../lib/layout/treeLayout'
+  import { buildChildBranchPath, computeFitBounds, panUnitsPerPixel, uniqueRenderableFamilies } from '../lib/layout/treeGeometry'
   import { describeAllRelationships } from '../lib/relationship/kinship'
-  import { scrollToRequest } from '../lib/stores/appState'
+  import { computeLineagePath, parentChildLinkKey } from '../lib/relationship/lineagePath'
   import NodeCard from './NodeCard.svelte'
 
   interface Props {
     tree: Tree
     selectedPersonId: string | null
     povPersonId: string | null
+    focusRequestVersion: number
     onSelectPerson: (id: string) => void
+    onFocusPerson: (id: string) => void
   }
 
-  let { tree, selectedPersonId, povPersonId, onSelectPerson }: Props = $props()
+  let { tree, selectedPersonId, povPersonId, focusRequestVersion, onSelectPerson, onFocusPerson }: Props = $props()
 
-  const NODE_WIDTH = 150
-  const NODE_HEIGHT = 74
   const PADDING = 100
-  // A "zoomed in" viewport size for scroll-to/focus — close enough to comfortably
+  // A zoomed-in viewport size for focus mode, close enough to comfortably
   // read a handful of generations and siblings around the target, rather than
   // preserving whatever zoom level (often "fit the whole tree") was active before.
   const ZOOM_WIDTH = 1100
@@ -27,22 +28,16 @@
   // descendants down, siblings/cousins beside) instead of the tree's true roots.
   const layout = $derived(povPersonId ? computeFocusedLayout(tree, povPersonId) : computeLayout(tree))
   const povLabels = $derived(povPersonId ? describeAllRelationships(tree, povPersonId) : null)
+  const selectedPath = $derived(selectedPersonId ? computeLineagePath(tree, selectedPersonId) : null)
+  const renderedFamilies = $derived(uniqueRenderableFamilies(
+    Object.values(tree.families),
+    new Set(Object.keys(layout.families)),
+  ))
 
   const fitBounds = $derived.by(() => {
     const nodes = Object.values(layout.people)
-    if (nodes.length === 0) return { x: 0, y: 0, w: 1000, h: 700 }
-
-    const minX = Math.min(...nodes.map((node) => node.x))
-    const minY = Math.min(...nodes.map((node) => node.y))
-    const maxX = Math.max(...nodes.map((node) => node.x + NODE_WIDTH))
-    const maxY = Math.max(...nodes.map((node) => node.y + NODE_HEIGHT))
-
-    return {
-      x: minX,
-      y: minY,
-      w: maxX - minX + PADDING * 2,
-      h: maxY - minY + PADDING * 2,
-    }
+    const focusNode = povPersonId ? layout.people[povPersonId] : null
+    return computeFitBounds(nodes, NODE_WIDTH, NODE_HEIGHT, PADDING, focusNode ?? undefined)
   })
   const contentWidth = $derived(fitBounds.w)
   const contentHeight = $derived(fitBounds.h)
@@ -61,7 +56,7 @@
   // whole tree, since there's no single target to zoom to anymore.
   let fittedFor: string | null = null
   $effect(() => {
-    const key = `${povPersonId ?? ''}:${tree.id}`
+    const key = `${povPersonId ?? ''}:${tree.id}:${focusRequestVersion}`
     if (fittedFor === key || contentWidth <= 0) return
     fittedFor = key
     if (povPersonId && layout.people[povPersonId]) {
@@ -71,17 +66,9 @@
     }
   })
 
-  // Pure camera pan+zoom to a person, independent of focus — doesn't touch layout
-  // mode or relationship labels, just recenters and zooms in on the requested node.
-  $effect(() => {
-    const request = $scrollToRequest
-    if (!request) return
-    const node = layout.people[request.personId]
-    if (node) centerOn(node, ZOOM_WIDTH, ZOOM_HEIGHT)
-    scrollToRequest.set(null)
-  })
-
   let panState: { startX: number; startY: number; origin: typeof viewBox } | null = null
+  let pendingPan: { clientX: number; clientY: number } | null = null
+  let panFrame: number | null = null
 
   function onPointerDown(e: PointerEvent) {
     if ((e.target as HTMLElement).closest('.node-card')) return
@@ -91,16 +78,32 @@
 
   function onPointerMove(e: PointerEvent) {
     if (!panState || !containerEl) return
+    const latest = e.getCoalescedEvents?.().at(-1) ?? e
+    pendingPan = { clientX: latest.clientX, clientY: latest.clientY }
+    if (panFrame !== null) return
+    panFrame = requestAnimationFrame(applyPendingPan)
+  }
+
+  function applyPendingPan() {
+    panFrame = null
+    if (!panState || !containerEl || !pendingPan) return
     const rect = containerEl.getBoundingClientRect()
-    const scaleX = viewBox.w / rect.width
-    const scaleY = viewBox.h / rect.height
-    const dx = (e.clientX - panState.startX) * scaleX
-    const dy = (e.clientY - panState.startY) * scaleY
+    // preserveAspectRatio="meet" gives SVG one uniform screen scale. Using separate
+    // x/y ratios makes vertical panning feel sluggish whenever the aspect ratios differ.
+    const scale = panUnitsPerPixel(panState.origin, rect.width, rect.height)
+    const dx = (pendingPan.clientX - panState.startX) * scale
+    const dy = (pendingPan.clientY - panState.startY) * scale
     viewBox = { ...panState.origin, x: panState.origin.x - dx, y: panState.origin.y - dy }
   }
 
   function onPointerUp() {
+    if (panFrame !== null) {
+      cancelAnimationFrame(panFrame)
+      panFrame = null
+    }
+    if (pendingPan) applyPendingPan()
     panState = null
+    pendingPan = null
   }
 
   function onWheel(e: WheelEvent) {
@@ -139,13 +142,42 @@
     return nodeY(personId) + NODE_HEIGHT / 2
   }
   function familyX(familyId: string): number {
-    return layout.families[familyId].x + PADDING
+    return layout.families[familyId].x + PADDING + NODE_WIDTH / 2
   }
   function familyCenterY(familyId: string): number {
     return layout.families[familyId].y + PADDING + NODE_HEIGHT / 2
   }
 
   const marriageLineClass = (status: string) => (status === 'divorced' ? 'edge marriage divorced' : 'edge marriage')
+
+  function visibleChildren(family: Family): string[] {
+    return family.children.filter((childId) => Boolean(layout.people[childId]))
+  }
+
+  function isPathNode(personId: string): boolean {
+    return selectedPath?.personIds.has(personId) ?? false
+  }
+
+  function isPathPartner(family: Family, partnerId: string): boolean {
+    return family.children.some((childId) =>
+      selectedPath?.parentChildLinks.has(parentChildLinkKey(partnerId, childId)),
+    ) ?? false
+  }
+
+  function pathChildren(family: Family): string[] {
+    return visibleChildren(family).filter((childId) =>
+      family.partners.some((partner) =>
+        selectedPath?.parentChildLinks.has(parentChildLinkKey(partner.personId, childId)),
+      ),
+    )
+  }
+
+  function childBranchPath(familyId: string, childIds: string[]): string {
+    return buildChildBranchPath(
+      { x: familyX(familyId), y: familyCenterY(familyId) },
+      childIds.map((childId) => ({ x: nodeCenterX(childId), y: nodeY(childId) })),
+    )
+  }
 </script>
 
 <div class="canvas-wrap">
@@ -165,13 +197,14 @@
   >
     <svg viewBox="{viewBox.x} {viewBox.y} {viewBox.w} {viewBox.h}" class="tree-svg">
       <g class="edges">
-        {#each Object.values(tree.families) as family (family.id)}
+        {#each renderedFamilies as family (family.id)}
           {@const fx = familyX(family.id)}
           {@const fy = familyCenterY(family.id)}
           {#each family.partners as partner (partner.personId)}
             {#if layout.people[partner.personId]}
               <line
                 class={marriageLineClass(family.status)}
+                class:path-highlight={isPathPartner(family, partner.personId)}
                 x1={nodeCenterX(partner.personId)}
                 y1={nodeCenterY(partner.personId)}
                 x2={fx}
@@ -179,16 +212,21 @@
               />
             {/if}
           {/each}
-          {#each family.children as childId (childId)}
-            {#if layout.people[childId]}
-              {@const midY = (fy + nodeY(childId)) / 2}
-              <path
-                class="edge parent-child"
-                class:unknown-parent={family.partners.length === 0}
-                d="M {fx} {fy} L {fx} {midY} L {nodeCenterX(childId)} {midY} L {nodeCenterX(childId)} {nodeY(childId)}"
-              />
-            {/if}
-          {/each}
+          {@const childIds = visibleChildren(family)}
+          {#if childIds.length > 0}
+            <path
+              class="edge parent-child"
+              class:unknown-parent={family.partners.length === 0}
+              d={childBranchPath(family.id, childIds)}
+            />
+          {/if}
+          {@const highlightedChildIds = pathChildren(family)}
+          {#if highlightedChildIds.length > 0}
+            <path
+              class="edge parent-child path-highlight"
+              d={childBranchPath(family.id, highlightedChildIds)}
+            />
+          {/if}
         {/each}
       </g>
 
@@ -204,8 +242,10 @@
               <NodeCard
                 {person}
                 selected={selectedPersonId === person.id}
+                pathHighlighted={isPathNode(person.id)}
                 povLabel={povLabels ? (person.id === povPersonId ? 'Focus' : povLabels[person.id]?.label ?? null) : null}
                 onSelect={onSelectPerson}
+                {onFocusPerson}
               />
             </foreignObject>
           {/if}
@@ -247,6 +287,7 @@
     width: 100%;
     height: 100%;
     touch-action: none;
+    user-select: none;
     cursor: grab;
     background: var(--canvas-bg);
   }
@@ -263,6 +304,8 @@
   .edge {
     stroke: var(--edge);
     stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
     fill: none;
   }
   .edge.marriage.divorced {
@@ -272,5 +315,12 @@
   .edge.parent-child.unknown-parent {
     stroke-dasharray: 3 4;
     stroke: var(--edge-unknown);
+  }
+  .edge.path-highlight,
+  .edge.marriage.divorced.path-highlight {
+    stroke: var(--path-highlight);
+    stroke-width: 3;
+    stroke-dasharray: none;
+    filter: drop-shadow(0 0 3px var(--path-highlight-glow));
   }
 </style>

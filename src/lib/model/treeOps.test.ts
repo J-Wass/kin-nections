@@ -96,6 +96,45 @@ describe('family relationships', () => {
     expect(getParentsOf(tree, 'kid').map((p) => p.id)).toEqual(['mom'])
   })
 
+  it('replaces a one-parent family when a second parent is assigned', () => {
+    let tree = seedTree()
+    for (const id of ['mom', 'dad', 'kid']) tree = addPerson(tree, { id }).tree
+    tree = setParents(tree, 'kid', ['mom'])
+    tree = setParents(tree, 'kid', ['mom', 'dad'])
+
+    expect(getParentsOf(tree, 'kid').map((p) => p.id).sort()).toEqual(['dad', 'mom'])
+    expect(Object.values(tree.families).filter((family) => family.children.includes('kid'))).toHaveLength(1)
+  })
+
+  it('can remove one parent while preserving the other', () => {
+    let tree = seedTree()
+    for (const id of ['mom', 'dad', 'kid']) tree = addPerson(tree, { id }).tree
+    tree = setParents(tree, 'kid', ['mom', 'dad'])
+    tree = setParents(tree, 'kid', ['mom'])
+
+    expect(getParentsOf(tree, 'kid').map((p) => p.id)).toEqual(['mom'])
+  })
+
+  it('rejects self-parenting and ancestry cycles', () => {
+    let tree = seedTree()
+    for (const id of ['grandparent', 'parent', 'child']) tree = addPerson(tree, { id }).tree
+    tree = setParents(tree, 'parent', ['grandparent'])
+    tree = setParents(tree, 'child', ['parent'])
+
+    expect(() => setParents(tree, 'child', ['child'])).toThrow(/cycle/)
+    expect(() => setParents(tree, 'grandparent', ['child'])).toThrow(/cycle/)
+  })
+
+  it('rejects duplicate, missing, and self relationship endpoints', () => {
+    let tree = seedTree()
+    tree = addPerson(tree, { id: 'a' }).tree
+    tree = addPerson(tree, { id: 'b' }).tree
+    expect(() => setParents(tree, 'b', ['a', 'a'])).toThrow(/unique/)
+    expect(() => setParents(tree, 'b', ['missing'])).toThrow(/not found/)
+    expect(() => addSpouse(tree, 'a', 'a')).toThrow(/own spouse/)
+    expect(() => addSibling(tree, 'a', 'a')).toThrow(/own sibling/)
+  })
+
   it('addSpouse creates a married family and markDivorced flips it to divorced', () => {
     let tree = seedTree()
     tree = addPerson(tree, { id: 'a' }).tree

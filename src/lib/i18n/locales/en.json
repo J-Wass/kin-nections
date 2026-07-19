@@ -1,5 +1,6 @@
 {
   "app.title": "Kin-nections",
+  "app.menu": "Open menu",
   "app.tagline": "Your family tree, entirely in your browser",
 
   "common.save": "Save",
@@ -14,6 +15,7 @@
   "common.none": "None",
 
   "tree.new": "New tree",
+  "tree.manage": "Tree management",
   "tree.switch": "Switch tree",
   "tree.rename": "Rename tree",
   "tree.delete": "Delete tree",
@@ -60,7 +62,6 @@
   "pov.title": "PoV mode",
   "pov.description": "Choose a person to see how everyone else in the tree relates to them.",
   "pov.choosePerson": "Choose a person",
-  "pov.scrollTo": "Scroll to person",
   "pov.focus": "Focus on person",
   "pov.self": "This is the selected person",
   "pov.exit": "Exit PoV mode",

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { addPerson } from './lib/model/treeOps'
-  import { applyMutation, povPersonId, selectedPersonId, showImportExport, tree, treeList } from './lib/stores/appState'
+  import { applyMutation, focusPerson, focusRequestVersion, povPersonId, selectedPersonId, showImportExport, tree, treeList } from './lib/stores/appState'
   import { t } from './lib/i18n'
   import TreeCanvas from './components/TreeCanvas.svelte'
   import PersonEditorPanel from './components/PersonEditorPanel.svelte'
@@ -8,6 +8,8 @@
   import ImportExportModal from './components/ImportExportModal.svelte'
   import PovModePanel from './components/PovModePanel.svelte'
   import LanguageSwitcher from './components/LanguageSwitcher.svelte'
+  import Menu from '@lucide/svelte/icons/menu'
+  import FileUp from '@lucide/svelte/icons/file-up'
 
   const isEmpty = $derived(Object.keys($tree.people).length === 0)
 
@@ -18,6 +20,7 @@
       return result.tree
     })
   }
+
 </script>
 
 <div class="app-shell">
@@ -25,11 +28,28 @@
     <div class="brand">
       <h1>{$t('app.title')}</h1>
     </div>
-    <div class="header-controls">
-      <TreeManagerBar tree={$tree} treeList={$treeList} />
+    <div class="primary-search">
       <PovModePanel tree={$tree} />
-      <button type="button" onclick={() => showImportExport.set(true)}>{$t('importExport.title')}</button>
-      <LanguageSwitcher />
+    </div>
+    <div class="header-menu">
+      <details>
+        <summary aria-label={$t('app.menu')} title={$t('app.menu')}>
+          <Menu size={20} aria-hidden="true" />
+        </summary>
+        <div class="menu-panel">
+          <section class="menu-section">
+            <h2>{$t('tree.manage')}</h2>
+            <TreeManagerBar tree={$tree} treeList={$treeList} />
+          </section>
+          <div class="menu-footer">
+            <button type="button" onclick={() => showImportExport.set(true)}>
+              <FileUp size={16} aria-hidden="true" />
+              <span>{$t('importExport.title')}</span>
+            </button>
+            <LanguageSwitcher />
+          </div>
+        </div>
+      </details>
     </div>
   </header>
 
@@ -45,7 +65,9 @@
           tree={$tree}
           selectedPersonId={$selectedPersonId}
           povPersonId={$povPersonId ?? null}
+          focusRequestVersion={$focusRequestVersion}
           onSelectPerson={(id) => selectedPersonId.set(id)}
+          onFocusPerson={focusPerson}
         />
       {/if}
     </div>
@@ -71,11 +93,11 @@
   }
 
   .app-header {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(360px, 680px) auto;
     align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 0.75rem;
+    gap: 1.25rem;
     padding: 0.75rem 1.25rem;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
@@ -86,24 +108,77 @@
     margin: 0;
   }
 
-  .header-controls {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
+  .primary-search {
+    min-width: 0;
+    width: 100%;
   }
 
-  .header-controls > button {
-    font: inherit;
-    font-size: 0.85rem;
-    padding: 0.4rem 0.7rem;
+  .header-menu {
+    position: relative;
+  }
+  .header-menu details {
+    position: relative;
+  }
+  .header-menu summary {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    list-style: none;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--fg);
     cursor: pointer;
   }
-  .header-controls > button:hover {
+  .header-menu summary::-webkit-details-marker {
+    display: none;
+  }
+  .header-menu summary:hover,
+  .header-menu details[open] > summary {
+    background: var(--surface-hover);
+  }
+  .menu-panel {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    z-index: 30;
+    width: min(390px, calc(100vw - 2rem));
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  }
+  .menu-section h2 {
+    margin: 0 0 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 650;
+    color: var(--fg-muted);
+  }
+  .menu-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-top: 0.85rem;
+    margin-top: 0.85rem;
+    border-top: 1px solid var(--border);
+  }
+  .menu-footer button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.65rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--fg);
+    cursor: pointer;
+  }
+  .menu-footer button:hover {
     background: var(--surface-hover);
   }
 
@@ -147,6 +222,15 @@
   }
 
   @media (max-width: 720px) {
+    .app-header {
+      grid-template-columns: 1fr auto;
+      gap: 0.75rem;
+      padding: 0.65rem 0.75rem;
+    }
+    .primary-search {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
     .app-main {
       flex-direction: column;
     }

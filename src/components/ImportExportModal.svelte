@@ -2,6 +2,7 @@
   import type { Tree } from '../lib/model/types'
   import { createEmptyTree } from '../lib/model/types'
   import { generateId } from '../lib/model/treeOps'
+  import { validateTree } from '../lib/model/validateTree'
   import { parseGedcom } from '../lib/gedcom/parse'
   import { serializeGedcom } from '../lib/gedcom/serialize'
   import { parseCsvTree } from '../lib/csv/parse'
@@ -57,7 +58,7 @@
       const treeName = file.name.replace(/\.[^.]+$/, '')
       let imported: Tree
       if (format === 'json') {
-        const parsed = JSON.parse(await file.text()) as Tree
+        const parsed = validateTree(JSON.parse(await file.text()))
         imported = { ...parsed, id: generateId('tree') }
       } else if (format === 'gedcom') {
         imported = parseGedcom(await file.text(), treeName)
@@ -71,6 +72,7 @@
         const lines = await extractLines(await file.arrayBuffer())
         imported = parseRegisterReport(inferDepths(lines), treeName)
       }
+      imported = validateTree(imported)
       replaceActiveTree(imported)
       importSuccess = $t('importExport.importSuccess', { count: Object.keys(imported.people).length })
     } catch (err) {

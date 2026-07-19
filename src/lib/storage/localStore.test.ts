@@ -28,6 +28,13 @@ describe('localStore', () => {
     expect(listTrees()).toEqual([{ id: 't1', name: 'My Family', updatedAt: tree.updatedAt }])
   })
 
+  it('returns null for corrupt or structurally invalid stored trees', () => {
+    localStorage.setItem('kin-nections:tree:broken-json', '{')
+    localStorage.setItem('kin-nections:tree:invalid-tree', JSON.stringify({ id: 'invalid-tree' }))
+    expect(loadTree('broken-json')).toBeNull()
+    expect(loadTree('invalid-tree')).toBeNull()
+  })
+
   it('updates the index summary in place on re-save rather than duplicating', () => {
     const tree = createEmptyTree('t1', 'My Family')
     saveTree(tree)

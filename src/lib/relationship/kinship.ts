@@ -83,6 +83,21 @@ function shortestPath(graph: Map<string, Edge[]>, fromId: string, toId: string):
   return null
 }
 
+function shortestPathsFrom(graph: Map<string, Edge[]>, fromId: string): Map<string, EdgeType[]> {
+  const paths = new Map<string, EdgeType[]>([[fromId, []]])
+  const queue = [fromId]
+  while (queue.length > 0) {
+    const currentId = queue.shift()!
+    const currentPath = paths.get(currentId)!
+    for (const edge of graph.get(currentId) ?? []) {
+      if (paths.has(edge.to)) continue
+      paths.set(edge.to, [...currentPath, edge.type])
+      queue.push(edge.to)
+    }
+  }
+  return paths
+}
+
 function isRun(path: EdgeType[], type: EdgeType): boolean {
   return path.length > 0 && path.every((step) => step === type)
 }
@@ -148,9 +163,7 @@ function classifyMixedShortPath(path: EdgeType[]): string | null {
   return table[key] ?? null
 }
 
-export function describeRelationship(tree: Tree, fromId: string, toId: string): KinshipResult {
-  const graph = buildAdjacency(tree)
-  const path = shortestPath(graph, fromId, toId)
+function classifyRelationship(tree: Tree, fromId: string, toId: string, path: EdgeType[] | null): KinshipResult {
   if (path === null) return { label: 'No known relation', path: [] }
   if (path.length === 0) return { label: 'Self', path: [] }
 
@@ -174,12 +187,18 @@ export function describeRelationship(tree: Tree, fromId: string, toId: string): 
   return { label: `Related (${path.length} steps)`, path }
 }
 
+export function describeRelationship(tree: Tree, fromId: string, toId: string): KinshipResult {
+  const graph = buildAdjacency(tree)
+  return classifyRelationship(tree, fromId, toId, shortestPath(graph, fromId, toId))
+}
+
 /** Computes every reachable person's relationship label relative to `fromId`. */
 export function describeAllRelationships(tree: Tree, fromId: string): Record<string, KinshipResult> {
+  const paths = shortestPathsFrom(buildAdjacency(tree), fromId)
   const result: Record<string, KinshipResult> = {}
   for (const personId of Object.keys(tree.people)) {
     if (personId === fromId) continue
-    result[personId] = describeRelationship(tree, fromId, personId)
+    result[personId] = classifyRelationship(tree, fromId, personId, paths.get(personId) ?? null)
   }
   return result
 }

@@ -40,22 +40,16 @@ export const selectedPersonId = writable<string | null>(null)
 /** The person currently "focused": drives both PoV relationship labels and the
  * ancestors-up/descendants-down re-rooted layout in TreeCanvas. Null = normal view. */
 export const povPersonId = writable<string | null>(null)
+/** Increments for every valid focus command, including repeat requests for the
+ * already-focused person, so TreeCanvas can reliably recenter and zoom. */
+export const focusRequestVersion = writable(0)
 export const showImportExport = writable(false)
 
-interface ScrollToRequest {
-  personId: string
-  token: number
-}
-let scrollToTokenCounter = 0
-/** A one-shot "pan the camera to this person" request, distinct from `povPersonId` —
- * scrolling never changes the layout or relationship labels, it just recenters the
- * view. TreeCanvas consumes and clears it after handling. Wrapped with a token so
- * requesting the same person twice in a row still re-fires reliably. */
-export const scrollToRequest = writable<ScrollToRequest | null>(null)
-
-export function requestScrollToPerson(personId: string): void {
-  scrollToTokenCounter += 1
-  scrollToRequest.set({ personId, token: scrollToTokenCounter })
+export function focusPerson(personId: string): void {
+  if (!get(tree).people[personId]) return
+  selectedPersonId.set(personId)
+  povPersonId.set(personId)
+  focusRequestVersion.update((version) => version + 1)
 }
 
 function refreshTreeList(): void {
