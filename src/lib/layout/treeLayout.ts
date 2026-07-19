@@ -1,8 +1,12 @@
 import type { Tree } from '../model/types'
 import { getChildrenOf, getParentsOf, getSpousesOf } from '../model/treeOps'
 
+export const NODE_WIDTH = 112
+export const NODE_HEIGHT = 124
 export const NODE_SPACING_X = 180
-export const GENERATION_SPACING_Y = 160
+export const GENERATION_SPACING_Y = 260
+
+const FOREST_GAP_COLUMNS = 1
 
 export interface LayoutNode {
   id: string
@@ -188,7 +192,7 @@ export function computeLayout(tree: Tree): TreeLayout {
   let cursor = 0
   for (const unit of forest) {
     place(unit, cursor)
-    cursor += unit.width
+    cursor += unit.width + FOREST_GAP_COLUMNS
   }
 
   return {
@@ -221,47 +225,53 @@ function computeFamilyPositions(tree: Tree, people: Record<string, LayoutNode>):
   return families
 }
 
-/** Everyone reachable from `startId` via parent/child/spouse edges (in either
- * direction), used to scope the focused layout to the focus person's own relatives —
- * a tree may contain multiple unrelated family lines, and there's no sensible position
- * for a branch that isn't actually connected to the focus person. */
-function findConnectedComponent(tree: Tree, startId: string): Set<string> {
-  const visited = new Set<string>([startId])
+interface FocusConnection {
+  distance: number
+  generation: number
+}
+
+/** Shortest family path from the focus person, carrying its relative generation.
+ * Direct parents and children must stay exactly one row away even when the default
+ * layout has pushed the focus person down to match a spouse's distant branch. */
+function findFocusConnections(tree: Tree, startId: string): Map<string, FocusConnection> {
+  const connections = new Map<string, FocusConnection>([[startId, { distance: 0, generation: 0 }]])
   const queue = [startId]
   while (queue.length > 0) {
     const id = queue.shift()!
+    const current = connections.get(id)!
     const neighbors = [
-      ...getParentsOf(tree, id).map((p) => p.id),
-      ...getChildrenOf(tree, id).map((p) => p.id),
-      ...getSpousesOf(tree, id).map((s) => s.person.id),
+      ...getParentsOf(tree, id).map((person) => ({ id: person.id, generationDelta: -1 })),
+      ...getChildrenOf(tree, id).map((person) => ({ id: person.id, generationDelta: 1 })),
+      ...getSpousesOf(tree, id).map((spouse) => ({ id: spouse.person.id, generationDelta: 0 })),
     ]
-    for (const n of neighbors) {
-      if (!visited.has(n)) {
-        visited.add(n)
-        queue.push(n)
+    for (const neighbor of neighbors) {
+      if (!connections.has(neighbor.id)) {
+        connections.set(neighbor.id, {
+          distance: current.distance + 1,
+          generation: current.generation + neighbor.generationDelta,
+        })
+        queue.push(neighbor.id)
       }
     }
   }
-  return visited
+  return connections
 }
 
-/** Lays out the connected family around a single focus person. The general layout
- * supplies stable generation and left-to-right ordering, then each generation is
- * centered around the focus household. On the focus row, the focus person and their
- * spouses form the central block; other people on that row are balanced around it.
- * This keeps the selected person near the visual center even when they occupied an
- * outside branch in the root-oriented layout. */
+/** Re-roots the connected tree around one person. People joined as spouses or
+ * siblings are moved as a row-level group, so focus mode can reorganize branches
+ * without splitting couples or interleaving sibling households. */
 export function computeFocusedLayout(tree: Tree, focusPersonId: string): TreeLayout {
   const full = computeLayout(tree)
   const focusNode = full.people[focusPersonId]
   if (!focusNode) return { people: {}, families: {}, width: 0, height: 0 }
 
-  const connected = findConnectedComponent(tree, focusPersonId)
+  const connections = findFocusConnections(tree, focusPersonId)
   const people: Record<string, LayoutNode> = {}
 
   for (const [id, node] of Object.entries(full.people)) {
-    if (!connected.has(id)) continue
-    const generation = node.generation - focusNode.generation
+    const connection = connections.get(id)
+    if (!connection) continue
+    const generation = connection.generation
     people[id] = { ...node, generation, y: generation * GENERATION_SPACING_Y }
   }
 
@@ -272,41 +282,263 @@ export function computeFocusedLayout(tree: Tree, focusPersonId: string): TreeLay
     rows.set(node.generation, row)
   }
 
-  const focusRow = rows.get(0) ?? []
-  const spouseIds = new Set(
-    getSpousesOf(tree, focusPersonId)
-      .map((spouse) => spouse.person.id)
-      .filter((id) => people[id]?.generation === 0),
-  )
-  const spouses = focusRow.filter((node) => spouseIds.has(node.id)).sort((a, b) => a.x - b.x)
-  const spouseSplit = Math.floor(spouses.length / 2)
-  const focusBlock = [
-    ...spouses.slice(0, spouseSplit),
-    people[focusPersonId],
-    ...spouses.slice(spouseSplit),
-  ]
-  const others = focusRow
-    .filter((node) => node.id !== focusPersonId && !spouseIds.has(node.id))
-    .sort((a, b) => a.x - b.x)
-  const otherSplit = Math.floor(others.length / 2)
-  const orderedFocusRow = [...others.slice(0, otherSplit), ...focusBlock, ...others.slice(otherSplit)]
+  function buildRowGroups(row: LayoutNode[]): LayoutNode[][] {
+    const rowIds = new Set(row.map((node) => node.id))
+    const claimed = new Set<string>()
+    const groups: LayoutNode[][] = []
+    const families = Object.values(tree.families)
 
-  function placeCenteredRow(row: LayoutNode[], centerX: number): void {
-    const startX = centerX - ((row.length - 1) * NODE_SPACING_X) / 2
-    row.forEach((node, index) => {
-      node.x = startX + index * NODE_SPACING_X
-    })
+    const siblingFamilies = families
+      .map((family) => ({
+        family,
+        children: family.children.filter((id) => rowIds.has(id)),
+      }))
+      .filter(({ children }) => children.length >= 2)
+      .sort((a, b) => {
+        const distanceA = Math.min(...a.children.map((id) => connections.get(id)!.distance))
+        const distanceB = Math.min(...b.children.map((id) => connections.get(id)!.distance))
+        return distanceA - distanceB
+      })
+
+    for (const { children } of siblingFamilies) {
+      const siblings = children.filter((id) => !claimed.has(id))
+      if (siblings.length < 2) continue
+      siblings.forEach((id) => claimed.add(id))
+      const spouseIds = siblings.flatMap((id) =>
+        getSpousesOf(tree, id).map((spouse) => spouse.person.id),
+      ).filter((id, index, ids) => rowIds.has(id) && !claimed.has(id) && ids.indexOf(id) === index)
+      spouseIds.forEach((id) => claimed.add(id))
+      groups.push([...siblings, ...spouseIds].map((id) => people[id]).sort((a, b) => a.x - b.x))
+    }
+
+    const remaining = row
+      .filter((node) => !claimed.has(node.id))
+      .sort((a, b) => connections.get(a.id)!.distance - connections.get(b.id)!.distance || a.x - b.x)
+    for (const node of remaining) {
+      if (claimed.has(node.id)) continue
+      claimed.add(node.id)
+      const spouseNodes = getSpousesOf(tree, node.id)
+        .map((spouse) => spouse.person.id)
+        .filter((id, index, ids) => rowIds.has(id) && !claimed.has(id) && ids.indexOf(id) === index)
+        .map((id) => {
+          claimed.add(id)
+          return people[id]
+        })
+      groups.push([node, ...spouseNodes].sort((a, b) => a.x - b.x))
+    }
+
+    return groups
   }
 
-  placeCenteredRow(orderedFocusRow, 0)
-  const focusOffset = people[focusPersonId].x
-  for (const node of orderedFocusRow) node.x -= focusOffset
+  function reorderFocusGroup(group: LayoutNode[]): LayoutNode[] {
+    const groupIds = new Set(group.map((node) => node.id))
+    const families = Object.values(tree.families)
+    const hasSiblingInGroup = (personId: string) =>
+      families.some(
+        (family) => family.children.includes(personId) && family.children.some((id) => id !== personId && groupIds.has(id)),
+      )
+    const pivotPersonId = hasSiblingInGroup(focusPersonId)
+      ? focusPersonId
+      : [...new Set(getSpousesOf(tree, focusPersonId).map((spouse) => spouse.person.id))]
+          .find((id) => groupIds.has(id) && hasSiblingInGroup(id)) ?? focusPersonId
 
-  const householdCenter =
-    focusBlock.reduce((sum, node) => sum + node.x, 0) / Math.max(focusBlock.length, 1)
-  for (const [generation, row] of rows) {
-    if (generation === 0) continue
-    placeCenteredRow(row.sort((a, b) => a.x - b.x), householdCenter)
+    const siblingIds = new Set<string>([pivotPersonId])
+    for (const family of families) {
+      if (!family.children.includes(pivotPersonId)) continue
+      for (const childId of family.children) if (groupIds.has(childId)) siblingIds.add(childId)
+    }
+
+    const claimed = new Set<string>()
+    const households = [...siblingIds]
+      .map((siblingId) => {
+        const spouseIds = [...new Set(getSpousesOf(tree, siblingId).map((spouse) => spouse.person.id))]
+        const spouses = spouseIds
+          .filter((id) => groupIds.has(id) && !siblingIds.has(id) && !claimed.has(id))
+          .map((id) => people[id])
+          .sort((a, b) => a.x - b.x)
+        const sibling = people[siblingId]
+        claimed.add(sibling.id)
+        spouses.forEach((node) => claimed.add(node.id))
+        return { sibling, spouses }
+      })
+      .sort((a, b) => a.sibling.x - b.sibling.x)
+
+    const focusHousehold = households.find((household) => household.sibling.id === pivotPersonId)!
+    const otherHouseholds = households.filter((household) => household !== focusHousehold)
+    const split = Math.floor(otherHouseholds.length / 2)
+    const centeredHouseholdList = [
+      ...otherHouseholds.slice(0, split),
+      focusHousehold,
+      ...otherHouseholds.slice(split),
+    ]
+    const focusHouseholdIndex = centeredHouseholdList.indexOf(focusHousehold)
+    const centeredHouseholds = centeredHouseholdList.flatMap((household, index) => {
+      if (index <= focusHouseholdIndex) return [...household.spouses, household.sibling]
+      return [household.sibling, ...household.spouses]
+    })
+
+    const leftovers = group.filter((node) => !claimed.has(node.id))
+    const left = leftovers.filter((node) => node.x < focusNode.x)
+    const right = leftovers.filter((node) => node.x >= focusNode.x)
+    return [...left, ...centeredHouseholds, ...right]
+  }
+
+  const GROUP_GAP = NODE_SPACING_X * 0.35
+
+  function placeGroups(groups: LayoutNode[][], centerX: number, focusId?: string): void {
+    if (groups.length === 0) return
+    const orderedGroups = [...groups].sort((a, b) => {
+      const distanceA = Math.min(...a.map((node) => connections.get(node.id)!.distance))
+      const distanceB = Math.min(...b.map((node) => connections.get(node.id)!.distance))
+      return distanceA - distanceB || a[0].x - b[0].x
+    })
+    const anchorIndex = focusId
+      ? orderedGroups.findIndex((group) => group.some((node) => node.id === focusId))
+      : 0
+    const anchor = orderedGroups.splice(Math.max(anchorIndex, 0), 1)[0]
+    const anchorOrder = focusId ? reorderFocusGroup(anchor) : anchor
+    const focusIndex = focusId ? anchorOrder.findIndex((node) => node.id === focusId) : -1
+    const anchorStart = focusId
+      ? centerX - focusIndex * NODE_SPACING_X
+      : centerX - ((anchorOrder.length - 1) * NODE_SPACING_X) / 2
+    anchorOrder.forEach((node, index) => (node.x = anchorStart + index * NODE_SPACING_X))
+
+    let leftEdge = anchorOrder[0].x
+    let rightEdge = anchorOrder[anchorOrder.length - 1].x
+    for (const group of orderedGroups) {
+      const originalCenter = group.reduce((sum, node) => sum + node.x, 0) / group.length
+      const leftExtent = centerX - leftEdge
+      const rightExtent = rightEdge - centerX
+      const useLeft = leftExtent === rightExtent ? originalCenter < focusNode.x : leftExtent < rightExtent
+      if (useLeft) {
+        const groupStart = leftEdge - GROUP_GAP - group.length * NODE_SPACING_X
+        group.forEach((node, index) => (node.x = groupStart + index * NODE_SPACING_X))
+        leftEdge = groupStart
+      } else {
+        const groupStart = rightEdge + GROUP_GAP + NODE_SPACING_X
+        group.forEach((node, index) => (node.x = groupStart + index * NODE_SPACING_X))
+        rightEdge = groupStart + (group.length - 1) * NODE_SPACING_X
+      }
+    }
+  }
+
+  function adjacentFamilyTarget(group: LayoutNode[], generation: number): number {
+    const groupIds = new Set(group.map((node) => node.id))
+    const closestDistance = Math.min(...group.map((node) => connections.get(node.id)!.distance))
+    const targets: number[] = []
+
+    for (const family of Object.values(tree.families)) {
+      if (generation > 0 && family.children.some((id) =>
+        groupIds.has(id) && connections.get(id)?.distance === closestDistance,
+      )) {
+        const parents = family.partners
+          .map((partner) => people[partner.personId])
+          .filter((node) => node?.generation === generation - 1)
+        if (parents.length > 0) {
+          targets.push(parents.reduce((sum, node) => sum + node.x, 0) / parents.length)
+        }
+      }
+
+      if (generation < 0 && family.partners.some((partner) =>
+        groupIds.has(partner.personId) && connections.get(partner.personId)?.distance === closestDistance,
+      )) {
+        const children = family.children
+          .map((id) => people[id])
+          .filter((node) => node?.generation === generation + 1)
+        if (children.length > 0) {
+          targets.push((Math.min(...children.map((node) => node.x)) + Math.max(...children.map((node) => node.x))) / 2)
+        }
+      }
+    }
+
+    if (targets.length > 0) return targets.reduce((sum, target) => sum + target, 0) / targets.length
+    return group.reduce((sum, node) => sum + node.x, 0) / group.length - focusNode.x
+  }
+
+  function placeGroupsByFamily(groups: LayoutNode[][], generation: number): void {
+    if (groups.length === 0) return
+    const placements = groups
+      .map((group) => {
+        const groupIds = new Set(group.map((node) => node.id))
+        const siblingFamily = Object.values(tree.families)
+          .filter((family) => family.children.filter((id) => groupIds.has(id)).length >= 2)
+          .sort((a, b) => {
+            const distanceA = Math.min(...a.children.filter((id) => groupIds.has(id)).map((id) => connections.get(id)!.distance))
+            const distanceB = Math.min(...b.children.filter((id) => groupIds.has(id)).map((id) => connections.get(id)!.distance))
+            return distanceA - distanceB
+          })[0]
+        let orderedGroup = group
+
+        if (siblingFamily) {
+          const siblingIds = siblingFamily.children.filter((id) => groupIds.has(id))
+          const siblingIdSet = new Set(siblingIds)
+          const claimed = new Set(siblingIds)
+          const households = siblingIds
+            .map((siblingId) => {
+              const spouses = [...new Set(getSpousesOf(tree, siblingId).map((spouse) => spouse.person.id))]
+                .filter((id) => groupIds.has(id) && !siblingIdSet.has(id) && !claimed.has(id))
+                .map((id) => people[id])
+                .sort((a, b) => a.x - b.x)
+              spouses.forEach((node) => claimed.add(node.id))
+              return { sibling: people[siblingId], spouses }
+            })
+            .sort((a, b) => a.sibling.x - b.sibling.x)
+          const split = Math.ceil(households.length / 2)
+          const leftHouseholds = households.slice(0, split).flatMap((household) => [...household.spouses, household.sibling])
+          const rightHouseholds = households.slice(split).flatMap((household) => [household.sibling, ...household.spouses])
+          const leftovers = group.filter((node) => !claimed.has(node.id))
+          orderedGroup = [
+            ...leftovers.filter((node) => node.x < focusNode.x),
+            ...leftHouseholds,
+            ...rightHouseholds,
+            ...leftovers.filter((node) => node.x >= focusNode.x),
+          ]
+        }
+
+        return {
+          group: orderedGroup,
+          target: adjacentFamilyTarget(group, generation),
+          distance: Math.min(...group.map((node) => connections.get(node.id)!.distance)),
+        }
+      })
+      .sort((a, b) => a.distance - b.distance || a.target - b.target || a.group[0].x - b.group[0].x)
+
+    const occupied: { start: number; end: number }[] = []
+    const separation = NODE_SPACING_X + GROUP_GAP
+
+    function isAvailable(start: number, end: number): boolean {
+      return occupied.every((interval) => end + separation <= interval.start || start >= interval.end + separation)
+    }
+
+    for (const placement of placements) {
+      const width = (placement.group.length - 1) * NODE_SPACING_X
+      const desiredStart = placement.target - width / 2
+      const candidates = [
+        desiredStart,
+        ...occupied.flatMap((interval) => [interval.start - separation - width, interval.end + separation]),
+      ].filter((start) => isAvailable(start, start + width))
+      const start = candidates.reduce((best, candidate) =>
+        Math.abs(candidate - desiredStart) < Math.abs(best - desiredStart) ? candidate : best,
+      )
+      placement.group.forEach((node, index) => {
+        node.x = start + index * NODE_SPACING_X
+      })
+      occupied.push({ start, end: start + width })
+    }
+  }
+
+  const focusRow = rows.get(0) ?? []
+  placeGroups(buildRowGroups(focusRow), 0, focusPersonId)
+
+  const minGeneration = Math.min(...rows.keys())
+  const maxGeneration = Math.max(...rows.keys())
+  for (let generation = 1; generation <= maxGeneration; generation++) {
+    const row = rows.get(generation)
+    if (row) placeGroupsByFamily(buildRowGroups(row), generation)
+  }
+  for (let generation = -1; generation >= minGeneration; generation--) {
+    const row = rows.get(generation)
+    if (row) placeGroupsByFamily(buildRowGroups(row), generation)
   }
 
   let minX = 0

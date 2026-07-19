@@ -1,5 +1,6 @@
 {
   "app.title": "Kin-nections",
+  "app.menu": "Abrir menú",
   "app.tagline": "Tu árbol genealógico, completamente en tu navegador",
 
   "common.save": "Guardar",
@@ -14,6 +15,7 @@
   "common.none": "Ninguno",
 
   "tree.new": "Nuevo árbol",
+  "tree.manage": "Gestión del árbol",
   "tree.switch": "Cambiar árbol",
   "tree.rename": "Renombrar árbol",
   "tree.delete": "Eliminar árbol",
@@ -60,7 +62,6 @@
   "pov.title": "Modo PoV",
   "pov.description": "Elige una persona para ver cómo se relaciona con ella el resto del árbol.",
   "pov.choosePerson": "Elegir una persona",
-  "pov.scrollTo": "Desplazarse a la persona",
   "pov.focus": "Enfocar a la persona",
   "pov.self": "Esta es la persona seleccionada",
   "pov.exit": "Salir del modo PoV",

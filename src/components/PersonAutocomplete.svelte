@@ -1,13 +1,15 @@
 <script lang="ts">
   import type { Tree } from '../lib/model/types'
+  import { formatPersonName } from '../lib/model/personDisplay'
 
   interface Props {
     tree: Tree
     onPick: (id: string | null) => void
     placeholder?: string
+    large?: boolean
   }
 
-  let { tree, onPick, placeholder = '' }: Props = $props()
+  let { tree, onPick, placeholder = '', large = false }: Props = $props()
 
   const uid = $props.id()
   const listboxId = `${uid}-listbox`
@@ -20,7 +22,7 @@
   function personLabel(id: string): string {
     const p = tree.people[id]
     if (!p) return id
-    const name = p.isPlaceholder ? 'Unknown' : `${p.firstName} ${p.lastName}`.trim() || 'Unnamed'
+    const name = formatPersonName(p)
     // Birth year disambiguates same-name people, which are common in real genealogies.
     const year = p.birthDate?.match(/\d{4}/)?.[0]
     return year ? `${name} (b. ${year})` : name
@@ -68,7 +70,7 @@
   }
 </script>
 
-<div class="autocomplete">
+<div class:large class="autocomplete">
   <input
     bind:this={inputEl}
     type="text"
@@ -101,6 +103,9 @@
     position: relative;
     min-width: 220px;
   }
+  .autocomplete.large {
+    min-width: 300px;
+  }
   input {
     width: 100%;
     font: inherit;
@@ -110,6 +115,12 @@
     border: 1px solid var(--border);
     background: var(--input-bg);
     color: var(--fg);
+  }
+  .large input {
+    min-height: 44px;
+    padding: 0.65rem 0.8rem;
+    font-size: 0.95rem;
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   }
   .suggestions {
     position: absolute;

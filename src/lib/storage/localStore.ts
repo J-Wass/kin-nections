@@ -1,4 +1,5 @@
 import type { Tree } from '../model/types'
+import { validateTree } from '../model/validateTree'
 
 const INDEX_KEY = 'kin-nections:index'
 const TREE_KEY_PREFIX = 'kin-nections:tree:'
@@ -18,8 +19,12 @@ function readIndex(): TreeIndex {
   const raw = localStorage.getItem(INDEX_KEY)
   if (!raw) return { activeTreeId: null, trees: [] }
   try {
-    const parsed = JSON.parse(raw) as TreeIndex
-    return { activeTreeId: parsed.activeTreeId ?? null, trees: parsed.trees ?? [] }
+    const parsed = JSON.parse(raw) as Partial<TreeIndex>
+    const trees = Array.isArray(parsed.trees)
+      ? parsed.trees.filter((tree): tree is TreeSummary =>
+          typeof tree?.id === 'string' && typeof tree.name === 'string' && typeof tree.updatedAt === 'string')
+      : []
+    return { activeTreeId: typeof parsed.activeTreeId === 'string' ? parsed.activeTreeId : null, trees }
   } catch {
     return { activeTreeId: null, trees: [] }
   }
@@ -50,7 +55,11 @@ export function setActiveTreeId(id: string | null): void {
 export function loadTree(id: string): Tree | null {
   const raw = localStorage.getItem(treeKey(id))
   if (!raw) return null
-  return JSON.parse(raw) as Tree
+  try {
+    return validateTree(JSON.parse(raw))
+  } catch {
+    return null
+  }
 }
 
 export function saveTree(tree: Tree): void {

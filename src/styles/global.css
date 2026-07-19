@@ -15,6 +15,9 @@
   --accent-fg: #ffffff;
   --accent-ring: rgba(63, 111, 214, 0.25);
   --focus-ring: #3f6fd6;
+  --path-highlight: #008f68;
+  --path-highlight-ring: rgba(0, 143, 104, 0.3);
+  --path-highlight-glow: rgba(0, 143, 104, 0.55);
 
   --danger: #c0392b;
   --danger-bg-hover: #fbeae8;
@@ -48,6 +51,9 @@
     --accent-fg: #0c1622;
     --accent-ring: rgba(111, 156, 235, 0.3);
     --focus-ring: #6f9ceb;
+    --path-highlight: #59e6b3;
+    --path-highlight-ring: rgba(89, 230, 179, 0.3);
+    --path-highlight-glow: rgba(89, 230, 179, 0.65);
 
     --danger: #e57368;
     --danger-bg-hover: #3a2220;
