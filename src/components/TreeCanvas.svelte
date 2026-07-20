@@ -404,7 +404,7 @@
   .canvas-toolbar {
     position: absolute;
     top: 0.75rem;
-    right: 0.75rem;
+    inset-inline-end: 0.75rem;
     z-index: 5;
   }
 

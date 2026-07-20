@@ -149,7 +149,7 @@
   .focus-person-btn {
     position: absolute;
     top: 0.3rem;
-    right: 0.3rem;
+    inset-inline-end: 0.3rem;
     z-index: 2;
     width: 1.65rem;
     height: 1.65rem;
@@ -195,7 +195,7 @@
 
   .relatives-toggle {
     position: absolute;
-    right: 0.3rem;
+    inset-inline-end: 0.3rem;
     bottom: 0.3rem;
     z-index: 2;
     width: 1.75rem;

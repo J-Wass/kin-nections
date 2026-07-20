@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { get } from 'svelte/store'
 import { mount, unmount } from 'svelte'
-import { currentLocale } from '../lib/i18n'
+import { availableLocales, currentLocale } from '../lib/i18n'
 import LanguageSwitcher from './LanguageSwitcher.svelte'
 
 let component: ReturnType<typeof mount> | null = null
@@ -19,7 +19,9 @@ describe('LanguageSwitcher', () => {
 
     expect(document.querySelector('.language-glyphs')?.textContent).toBe('文 A ض')
     const select = document.querySelector<HTMLSelectElement>('.language-select')!
-    expect([...select.options].map((option) => option.value)).toEqual(['en', 'es'])
+    expect([...select.options].map((option) => option.value)).toEqual(
+      availableLocales.map((l) => l.code),
+    )
 
     select.value = 'es'
     select.dispatchEvent(new Event('change', { bubbles: true }))

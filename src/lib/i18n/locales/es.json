@@ -88,14 +88,13 @@
 
   "importExport.title": "Importar / exportar",
   "importExport.export": "Exportar",
-  "importExport.import": "Importar",
   "importExport.format": "Formato",
   "importExport.format.json": "Kin-nections JSON",
   "importExport.format.gedcom": "GEDCOM (.ged)",
   "importExport.format.csv": "CSV",
   "importExport.format.pdf": "PDF (informe de descendientes)",
   "importExport.pdfHint": "Funciona mejor con informes de descendientes/pedigrí con sangría (nombre, nacimiento/fallecimiento, cónyuge, líneas de matrimonio). Solo importación: no hay exportación a PDF.",
-  "importExport.chooseFile": "Elegir archivo…",
+  "importExport.importFile": "Importar archivo…",
   "importExport.importSuccess": "Se importaron {{count}} personas.",
   "importExport.importError": "No se pudo importar ese archivo: {{message}}",
 

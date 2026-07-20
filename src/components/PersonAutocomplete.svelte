@@ -120,13 +120,15 @@
     min-height: 44px;
     padding: 0.65rem 0.8rem;
     font-size: 0.95rem;
-    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    border-start-start-radius: var(--radius-sm);
+    border-end-start-radius: var(--radius-sm);
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
   }
   .suggestions {
     position: absolute;
     top: calc(100% + 2px);
-    left: 0;
-    right: 0;
+    inset-inline: 0;
     z-index: 20;
     list-style: none;
     margin: 0;
@@ -140,7 +142,7 @@
   }
   .suggestions button {
     width: 100%;
-    text-align: left;
+    text-align: start;
     padding: 0.4rem 0.5rem;
     border: none;
     background: none;

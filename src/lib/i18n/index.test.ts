@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { availableLocales, translate } from './index'
+import { availableLocales, isRtl, translate } from './index'
 
 beforeEach(() => {
   localStorage.clear()
@@ -26,7 +26,21 @@ describe('i18n translate', () => {
     expect(translate('en', 'does.not.exist')).toBe('does.not.exist')
   })
 
-  it('exposes English and Spanish as available locales', () => {
-    expect(availableLocales.map((l) => l.code).sort()).toEqual(['en', 'es'])
+  it('exposes all supported locales', () => {
+    expect(availableLocales.map((l) => l.code).sort()).toEqual(
+      ['ar', 'de', 'en', 'es', 'fr', 'hi', 'ja', 'pt', 'uk', 'zh'].sort(),
+    )
+  })
+
+  it('looks up a key in every non-English locale without falling back', () => {
+    for (const { code } of availableLocales) {
+      if (code === 'en') continue
+      expect(translate(code, 'common.save')).not.toBe('does.not.exist')
+      expect(translate(code, 'common.save')).not.toBe('common.save')
+    }
+  })
+
+  it('flags only Arabic as right-to-left', () => {
+    expect(availableLocales.filter((l) => isRtl(l.code)).map((l) => l.code)).toEqual(['ar'])
   })
 })

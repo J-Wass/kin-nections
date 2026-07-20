@@ -118,7 +118,7 @@
         {#if format !== 'pdf'}
           <button type="button" onclick={onExport}>{$t('importExport.export')}</button>
         {/if}
-        <button type="button" onclick={() => fileInput?.click()}>{$t('importExport.chooseFile')}</button>
+        <button type="button" onclick={() => fileInput?.click()}>{$t('importExport.importFile')}</button>
         <input
           bind:this={fileInput}
           type="file"

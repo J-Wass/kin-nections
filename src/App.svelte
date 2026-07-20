@@ -148,7 +148,7 @@
   .menu-panel {
     position: absolute;
     top: calc(100% + 0.5rem);
-    right: 0;
+    inset-inline-end: 0;
     z-index: 30;
     width: min(390px, calc(100vw - 2rem));
     padding: 1rem;

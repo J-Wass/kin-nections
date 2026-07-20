@@ -151,7 +151,7 @@
     flex-direction: column;
     height: 100%;
     background: var(--surface);
-    border-left: 1px solid var(--border);
+    border-inline-start: 1px solid var(--border);
   }
 
   .panel-header {

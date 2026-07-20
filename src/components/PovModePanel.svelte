@@ -64,8 +64,11 @@
   button.focus-submit {
     min-height: 44px;
     padding-inline: 0.9rem;
-    border-left: 0;
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    border-inline-start: 0;
+    border-start-end-radius: var(--radius-sm);
+    border-end-end-radius: var(--radius-sm);
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
     background: var(--accent);
     border-color: var(--accent);
     color: var(--accent-fg);

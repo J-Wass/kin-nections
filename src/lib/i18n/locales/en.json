@@ -24,7 +24,7 @@
   "tree.delete": "Delete tree",
   "tree.deleteConfirm": "Delete \"{{name}}\"? This cannot be undone.",
   "tree.namePrompt": "Tree name",
-  "tree.empty": "This tree has no one in it yet. Add your first person to get started.",
+  "tree.empty": "This tree has no one in it yet. Add your first person to get started, or use the import button in the top right menu.",
 
   "person.addFirst": "Add first person",
   "person.addPerson": "Add person",
@@ -88,14 +88,13 @@
 
   "importExport.title": "Import / export",
   "importExport.export": "Export",
-  "importExport.import": "Import",
   "importExport.format": "Format",
   "importExport.format.json": "Kin-nections JSON",
   "importExport.format.gedcom": "GEDCOM (.ged)",
   "importExport.format.csv": "CSV",
   "importExport.format.pdf": "PDF (descendant report)",
   "importExport.pdfHint": "Works best with indented descendant/pedigree reports (name, birth/death, spouse, marriage lines). Import only — there's no PDF export.",
-  "importExport.chooseFile": "Choose file…",
+  "importExport.importFile": "Import from file…",
   "importExport.importSuccess": "Imported {{count}} people.",
   "importExport.importError": "Couldn't import that file: {{message}}",
 
