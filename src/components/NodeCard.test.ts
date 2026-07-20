@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount, unmount } from 'svelte'
 import { createPerson } from '../lib/model/types'
+import type { FocusCloseness } from '../lib/relationship/focusCloseness'
 import NodeCard from './NodeCard.svelte'
 
 let component: ReturnType<typeof mount> | null = null
@@ -11,19 +12,28 @@ afterEach(async () => {
   document.body.innerHTML = ''
 })
 
-function renderCard() {
+function renderCard(
+  relativesExpandable = false,
+  relativesExpanded = false,
+  focusCloseness: FocusCloseness | null = null,
+) {
   const onSelect = vi.fn()
   const onFocusPerson = vi.fn()
+  const onToggleRelatives = vi.fn()
   component = mount(NodeCard, {
     target: document.body,
     props: {
       person: createPerson({ id: 'person', firstName: 'Ada', lastName: 'Lovelace' }),
       selected: false,
+      relativesExpandable,
+      relativesExpanded,
+      focusCloseness,
       onSelect,
       onFocusPerson,
+      onToggleRelatives,
     },
   })
-  return { onSelect, onFocusPerson }
+  return { onSelect, onFocusPerson, onToggleRelatives }
 }
 
 describe('NodeCard', () => {
@@ -38,8 +48,31 @@ describe('NodeCard', () => {
 
   it('focuses from the eye control without selecting separately', () => {
     const { onSelect, onFocusPerson } = renderCard()
-    document.querySelector<HTMLButtonElement>('.focus-person-btn')!.click()
+    const focusButton = document.querySelector<HTMLButtonElement>('.focus-person-btn')!
+    expect(getComputedStyle(focusButton).pointerEvents).toBe('auto')
+    focusButton.click()
     expect(onFocusPerson).toHaveBeenCalledWith('person')
     expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('exposes an accessible relative expansion control', () => {
+    const { onSelect, onToggleRelatives } = renderCard(true, false)
+    const toggle = document.querySelector<HTMLButtonElement>('.relatives-toggle')!
+
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(toggle.getAttribute('aria-label')).toBe('Expand relatives')
+    toggle.click()
+
+    expect(onToggleRelatives).toHaveBeenCalledWith('person')
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('exposes the focus-closeness tier for styling and accessibility inspection', () => {
+    renderCard(false, false, 'extended')
+    const card = document.querySelector<HTMLElement>('.node-card')!
+
+    expect(card.dataset.focusCloseness).toBe('extended')
+    expect(card.classList.contains('focus-colored')).toBe(true)
+    expect(card.classList.contains('closeness-extended')).toBe(true)
   })
 })

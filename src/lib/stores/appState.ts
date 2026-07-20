@@ -37,8 +37,8 @@ export const tree = writable<Tree>(initTree())
 export const treeList = writable<TreeSummary[]>(listTrees())
 
 export const selectedPersonId = writable<string | null>(null)
-/** The person currently "focused": drives both PoV relationship labels and the
- * ancestors-up/descendants-down re-rooted layout in TreeCanvas. Null = normal view. */
+/** The person currently focused: drives PoV relationship labels and centers the
+ * standard-layout viewport on that person. Null = normal view. */
 export const povPersonId = writable<string | null>(null)
 /** Increments for every valid focus command, including repeat requests for the
  * already-focused person, so TreeCanvas can reliably recenter and zoom. */

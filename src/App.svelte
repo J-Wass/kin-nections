@@ -2,6 +2,7 @@
   import { addPerson } from './lib/model/treeOps'
   import { applyMutation, focusPerson, focusRequestVersion, povPersonId, selectedPersonId, showImportExport, tree, treeList } from './lib/stores/appState'
   import { t } from './lib/i18n'
+  import { dismissOnOutsidePointer } from './lib/dom/dismissOnOutsidePointer'
   import TreeCanvas from './components/TreeCanvas.svelte'
   import PersonEditorPanel from './components/PersonEditorPanel.svelte'
   import TreeManagerBar from './components/TreeManagerBar.svelte'
@@ -12,6 +13,11 @@
   import FileUp from '@lucide/svelte/icons/file-up'
 
   const isEmpty = $derived(Object.keys($tree.people).length === 0)
+  let mainMenu: HTMLDetailsElement | undefined = $state()
+
+  function closeMainMenu() {
+    if (mainMenu) mainMenu.open = false
+  }
 
   function addFirstPerson() {
     applyMutation((current) => {
@@ -32,7 +38,7 @@
       <PovModePanel tree={$tree} />
     </div>
     <div class="header-menu">
-      <details>
+      <details bind:this={mainMenu} use:dismissOnOutsidePointer={closeMainMenu}>
         <summary aria-label={$t('app.menu')} title={$t('app.menu')}>
           <Menu size={20} aria-hidden="true" />
         </summary>
@@ -68,6 +74,7 @@
           focusRequestVersion={$focusRequestVersion}
           onSelectPerson={(id) => selectedPersonId.set(id)}
           onFocusPerson={focusPerson}
+          onStandardView={() => povPersonId.set(null)}
         />
       {/if}
     </div>

@@ -1,19 +1,37 @@
 <script lang="ts">
   import type { Person } from '../lib/model/types'
+  import type { FocusCloseness } from '../lib/relationship/focusCloseness'
   import { formatPersonName } from '../lib/model/personDisplay'
   import { t } from '../lib/i18n'
   import Eye from '@lucide/svelte/icons/eye'
+  import CirclePlus from '@lucide/svelte/icons/circle-plus'
+  import CircleMinus from '@lucide/svelte/icons/circle-minus'
 
   interface Props {
     person: Person
     selected: boolean
     pathHighlighted?: boolean
     povLabel?: string | null
+    relativesExpandable?: boolean
+    relativesExpanded?: boolean
+    focusCloseness?: FocusCloseness | null
     onSelect: (id: string) => void
     onFocusPerson: (id: string) => void
+    onToggleRelatives?: (id: string) => void
   }
 
-  let { person, selected, pathHighlighted = false, povLabel = null, onSelect, onFocusPerson }: Props = $props()
+  let {
+    person,
+    selected,
+    pathHighlighted = false,
+    povLabel = null,
+    relativesExpandable = false,
+    relativesExpanded = false,
+    focusCloseness = null,
+    onSelect,
+    onFocusPerson,
+    onToggleRelatives,
+  }: Props = $props()
 
   const displayName = $derived(formatPersonName(person))
 
@@ -29,6 +47,15 @@
   class:selected
   class:path-highlighted={pathHighlighted}
   class:placeholder={person.isPlaceholder}
+  class:relatives-expandable={relativesExpandable}
+  class:focus-colored={focusCloseness !== null}
+  class:closeness-focus={focusCloseness === 'focus'}
+  class:closeness-near={focusCloseness === 'near'}
+  class:closeness-extended={focusCloseness === 'extended'}
+  class:closeness-remote={focusCloseness === 'remote'}
+  class:closeness-none={focusCloseness === 'none'}
+  data-person-id={person.id}
+  data-focus-closeness={focusCloseness ?? undefined}
 >
   <button
     type="button"
@@ -53,6 +80,25 @@
   >
     <Eye size={16} strokeWidth={2.2} aria-hidden="true" />
   </button>
+  {#if relativesExpandable}
+    <button
+      type="button"
+      class="relatives-toggle"
+      aria-expanded={relativesExpanded}
+      aria-label={$t(relativesExpanded ? 'tree.collapseRelatives' : 'tree.expandRelatives')}
+      title={$t(relativesExpanded ? 'tree.collapseRelatives' : 'tree.expandRelatives')}
+      onclick={(event) => {
+        event.stopPropagation()
+        onToggleRelatives?.(person.id)
+      }}
+    >
+      {#if relativesExpanded}
+        <CircleMinus size={18} strokeWidth={2.2} aria-hidden="true" />
+      {:else}
+        <CirclePlus size={18} strokeWidth={2.2} aria-hidden="true" />
+      {/if}
+    </button>
+  {/if}
 </div>
 
 <style>
@@ -65,7 +111,7 @@
     border: 2px solid var(--node-border);
     background: var(--node-bg);
     color: var(--node-fg);
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     line-height: 1.2;
     text-align: center;
     user-select: none;
@@ -80,7 +126,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.15rem;
-    padding: 1.15rem 0.45rem 0.55rem;
+    padding: 1.2rem 0.35rem 0.55rem;
     border: 0;
     border-radius: inherit;
     background: transparent;
@@ -94,6 +140,10 @@
   .node-main:focus-visible {
     outline: 3px solid var(--focus-ring);
     outline-offset: -3px;
+  }
+
+  .node-card.relatives-expandable .node-main {
+    padding-bottom: 2.15rem;
   }
 
   .focus-person-btn {
@@ -114,18 +164,24 @@
     font-size: 1.05rem;
     line-height: 1;
     cursor: pointer;
-    opacity: 0;
-    pointer-events: none;
-    transform: scale(0.85);
-    transition: opacity 120ms ease, transform 120ms ease, background 120ms ease;
-  }
-
-  .node-card:hover .focus-person-btn,
-  .node-card:focus-within .focus-person-btn,
-  .node-card.selected .focus-person-btn {
     opacity: 1;
     pointer-events: auto;
     transform: scale(1);
+    transition: opacity 120ms ease, transform 120ms ease, background 120ms ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .focus-person-btn {
+      opacity: 0;
+      transform: scale(0.85);
+    }
+
+    .node-card:hover .focus-person-btn,
+    .node-card:focus-within .focus-person-btn,
+    .node-card.selected .focus-person-btn {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 
   .focus-person-btn:hover {
@@ -137,12 +193,32 @@
     outline-offset: 1px;
   }
 
-  @media (hover: none) {
-    .focus-person-btn {
-      opacity: 1;
-      pointer-events: auto;
-      transform: scale(1);
-    }
+  .relatives-toggle {
+    position: absolute;
+    right: 0.3rem;
+    bottom: 0.3rem;
+    z-index: 2;
+    width: 1.75rem;
+    height: 1.75rem;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--accent);
+    cursor: pointer;
+    transition: background 120ms ease, transform 120ms ease;
+  }
+
+  .relatives-toggle:hover {
+    background: var(--surface-hover);
+    transform: scale(1.06);
+  }
+
+  .relatives-toggle:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
   }
 
   .node-card.selected {
@@ -181,14 +257,45 @@
     --node-bg: var(--unknown-bg);
   }
 
+  .node-card.focus-colored.closeness-focus {
+    --node-border: var(--closeness-focus-border);
+    --node-bg: var(--closeness-focus-bg);
+  }
+  .node-card.focus-colored.closeness-near {
+    --node-border: var(--closeness-near-border);
+    --node-bg: var(--closeness-near-bg);
+  }
+  .node-card.focus-colored.closeness-extended {
+    --node-border: var(--closeness-extended-border);
+    --node-bg: var(--closeness-extended-bg);
+  }
+  .node-card.focus-colored.closeness-remote {
+    --node-border: var(--closeness-remote-border);
+    --node-bg: var(--closeness-remote-bg);
+  }
+  .node-card.focus-colored.closeness-none {
+    --node-border: var(--closeness-none-border);
+    --node-bg: var(--closeness-none-bg);
+  }
+
+  .node-card.focus-colored.selected {
+    border-color: var(--node-border);
+  }
+
+  .node-card.focus-colored.closeness-focus {
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--closeness-focus-border) 28%, transparent),
+      0 0 16px color-mix(in srgb, var(--closeness-focus-border) 38%, transparent);
+  }
+
   .name {
     font-weight: 600;
     white-space: normal;
     overflow: hidden;
     display: -webkit-box;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
     max-width: 100%;
     overflow-wrap: anywhere;
   }
@@ -202,5 +309,9 @@
     font-size: 0.68rem;
     font-weight: 600;
     color: var(--accent);
+  }
+
+  .node-card.focus-colored .pov-label {
+    color: color-mix(in srgb, var(--node-border) 78%, var(--node-fg));
   }
 </style>

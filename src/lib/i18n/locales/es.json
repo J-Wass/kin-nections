@@ -16,6 +16,9 @@
 
   "tree.new": "Nuevo árbol",
   "tree.manage": "Gestión del árbol",
+  "tree.standardView": "Vista estándar",
+  "tree.expandRelatives": "Ampliar familiares",
+  "tree.collapseRelatives": "Contraer familiares",
   "tree.switch": "Cambiar árbol",
   "tree.rename": "Renombrar árbol",
   "tree.delete": "Eliminar árbol",
@@ -61,10 +64,9 @@
 
   "pov.title": "Modo PoV",
   "pov.description": "Elige una persona para ver cómo se relaciona con ella el resto del árbol.",
-  "pov.choosePerson": "Elegir una persona",
+  "pov.choosePerson": "Encontrar a una persona",
   "pov.focus": "Enfocar a la persona",
   "pov.self": "Esta es la persona seleccionada",
-  "pov.exit": "Salir del modo PoV",
 
   "kinship.parent": "Padre/Madre",
   "kinship.child": "Hijo/a",

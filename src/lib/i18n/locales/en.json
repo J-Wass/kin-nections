@@ -16,6 +16,9 @@
 
   "tree.new": "New tree",
   "tree.manage": "Tree management",
+  "tree.standardView": "Standard view",
+  "tree.expandRelatives": "Expand relatives",
+  "tree.collapseRelatives": "Collapse relatives",
   "tree.switch": "Switch tree",
   "tree.rename": "Rename tree",
   "tree.delete": "Delete tree",
@@ -60,11 +63,10 @@
   "relationship.markDivorced": "Mark as divorced",
 
   "pov.title": "PoV mode",
-  "pov.description": "Choose a person to see how everyone else in the tree relates to them.",
-  "pov.choosePerson": "Choose a person",
+  "pov.description": "Find a person to see how everyone else in the tree relates to them.",
+  "pov.choosePerson": "Find a person",
   "pov.focus": "Focus on person",
   "pov.self": "This is the selected person",
-  "pov.exit": "Exit PoV mode",
 
   "kinship.parent": "Parent",
   "kinship.child": "Child",
