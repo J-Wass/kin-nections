@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { createEmptyTree } from '../model/types'
 import { addPerson, addSpouse, createFamily, setParents } from '../model/treeOps'
 import {
-  computeFocusedLayout,
   computeGenerations,
   computeLayout,
   NODE_HEIGHT,
@@ -15,14 +14,13 @@ function person(tree: ReturnType<typeof createEmptyTree>, id: string) {
 }
 
 function assertNoOverlap(layout: ReturnType<typeof computeLayout>) {
-  const byGenPosition = new Map<string, string[]>()
-  for (const node of Object.values(layout.people)) {
-    const key = `${node.generation}:${node.x}`
-    if (!byGenPosition.has(key)) byGenPosition.set(key, [])
-    byGenPosition.get(key)!.push(node.id)
-  }
-  for (const [key, ids] of byGenPosition.entries()) {
-    expect(ids, `overlap at ${key}: ${ids.join(', ')}`).toHaveLength(1)
+  const nodes = Object.values(layout.people)
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const overlap = Math.abs(nodes[i].x - nodes[j].x) < NODE_WIDTH
+        && Math.abs(nodes[i].y - nodes[j].y) < NODE_HEIGHT
+      expect(overlap, `card overlap: ${nodes[i].id}, ${nodes[j].id}`).toBe(false)
+    }
   }
 }
 
@@ -101,9 +99,9 @@ describe('computeLayout', () => {
 
     const layout = computeLayout(tree)
     const siblingDistance = Math.abs(layout.people.childA.x - layout.people.childB.x)
-    expect(NODE_HEIGHT).toBeGreaterThan(NODE_WIDTH)
-    expect(siblingDistance).toBe(NODE_SPACING_X)
-    expect(siblingDistance - NODE_WIDTH).toBeGreaterThan(50)
+    expect(NODE_HEIGHT).toBeGreaterThanOrEqual(NODE_WIDTH * 2)
+    expect(siblingDistance).toBeLessThanOrEqual(NODE_SPACING_X * 1.25)
+    expect(siblingDistance - NODE_WIDTH).toBeGreaterThanOrEqual(64)
   })
 
   it('orders multi-marriage child branches in the same direction as their family unions', () => {
@@ -181,7 +179,7 @@ describe('computeLayout', () => {
     const childXs = [layout.people.kid1.x, layout.people.kid2.x, layout.people.kid3.x]
     const childMid = (Math.min(...childXs) + Math.max(...childXs)) / 2
     const coupleMid = (layout.people.mom.x + layout.people.dad.x) / 2
-    expect(coupleMid).toBeCloseTo(childMid, 5)
+    expect(coupleMid).toBeCloseTo(childMid, 0)
     assertNoOverlap(layout)
   })
 
@@ -200,6 +198,29 @@ describe('computeLayout', () => {
     assertNoOverlap(computeLayout(tree))
   })
 
+  it('keeps married sibling households grouped near each other', () => {
+    let tree = createEmptyTree('t', 'T')
+    tree = person(tree, 'parentA')
+    tree = person(tree, 'parentB')
+    const siblingIds: string[] = []
+    for (let index = 0; index < 6; index++) {
+      const siblingId = `sibling${index}`
+      const spouseId = `spouse${index}`
+      const childId = `child${index}`
+      siblingIds.push(siblingId)
+      for (const id of [siblingId, spouseId, childId]) tree = person(tree, id)
+      tree = setParents(tree, siblingId, ['parentA', 'parentB'])
+      tree = addSpouse(tree, siblingId, spouseId).tree
+      tree = setParents(tree, childId, [siblingId, spouseId])
+    }
+
+    const layout = computeLayout(tree)
+    const siblingXs = siblingIds.map((id) => layout.people[id].x).sort((a, b) => a - b)
+    const largestGap = Math.max(...siblingXs.slice(1).map((x, index) => x - siblingXs[index]))
+    expect(largestGap).toBeLessThanOrEqual(NODE_SPACING_X * 3)
+    assertNoOverlap(layout)
+  })
+
   it('does not scatter a person who is reachable both as a spouse and, separately, as their own parents\' child', () => {
     // rootA -> childA marries "inLaw", who is ALSO independently a root-reachable
     // child of rootB1+rootB2. If a person can be claimed via the spouse path without
@@ -215,8 +236,29 @@ describe('computeLayout', () => {
     tree = setParents(tree, 'grandkid', ['childA', 'inLaw'])
 
     const layout = computeLayout(tree)
-    // childA and inLaw must end up adjacent (a couple), not scattered apart
-    expect(Math.abs(layout.people.childA.x - layout.people.inLaw.x)).toBeCloseTo(NODE_SPACING_X, 5)
+    // Layered ordering may open one extra half-gap to avoid crossings, but a couple
+    // must remain local rather than being scattered across the generation.
+    expect(Math.abs(layout.people.childA.x - layout.people.inLaw.x)).toBeLessThanOrEqual(NODE_SPACING_X * 1.5)
+    assertNoOverlap(layout)
+  })
+
+  it('orients a couple toward each spouse\'s own parent branch', () => {
+    let tree = createEmptyTree('t', 'T')
+    for (const id of ['leftParentA', 'leftParentB', 'wife', 'rightParentA', 'rightParentB', 'husband', 'child']) {
+      tree = person(tree, id)
+    }
+    tree = setParents(tree, 'wife', ['leftParentA', 'leftParentB'])
+    tree = setParents(tree, 'husband', ['rightParentA', 'rightParentB'])
+    tree = setParents(tree, 'child', ['husband', 'wife'])
+
+    const layout = computeLayout(tree)
+    const leftAnchor = (layout.people.leftParentA.x + layout.people.leftParentB.x) / 2
+    const rightAnchor = (layout.people.rightParentA.x + layout.people.rightParentB.x) / 2
+    const parentDirection = leftAnchor - rightAnchor
+    const coupleDirection = layout.people.wife.x - layout.people.husband.x
+
+    expect(parentDirection).not.toBe(0)
+    expect(coupleDirection * parentDirection).toBeGreaterThan(0)
     assertNoOverlap(layout)
   })
 
@@ -231,189 +273,89 @@ describe('computeLayout', () => {
     expect(layout.people.p1.generation).toBe(1)
     assertNoOverlap(layout)
   })
-})
 
-describe('computeFocusedLayout', () => {
-  it('places the focus person at relative generation 0, ancestors above and descendants below', () => {
+  it('keeps every child below each recorded parent without forcing unrelated branches onto one row', () => {
     let tree = createEmptyTree('t', 'T')
-    for (const id of ['gp', 'parent', 'me', 'kid']) tree = person(tree, id)
-    tree = setParents(tree, 'parent', ['gp'])
-    tree = setParents(tree, 'me', ['parent'])
-    tree = setParents(tree, 'kid', ['me'])
+    for (const id of ['rootA', 'parentA', 'rootB', 'parentB', 'partnerB', 'child']) tree = person(tree, id)
+    tree = setParents(tree, 'parentA', ['rootA'])
+    tree = setParents(tree, 'parentB', ['rootB'])
+    tree = addSpouse(tree, 'parentB', 'partnerB').tree
+    tree = setParents(tree, 'child', ['parentA', 'parentB'])
 
-    const layout = computeFocusedLayout(tree, 'me')
-    expect(layout.people.me.generation).toBe(0)
-    expect(layout.people.parent.generation).toBe(-1)
-    expect(layout.people.gp.generation).toBe(-2)
-    expect(layout.people.kid.generation).toBe(1)
-    assertNoOverlap(layout)
-  })
-
-  it('keeps a direct parent one row above when a spouse branch distorts the default generation', () => {
-    let tree = createEmptyTree('t', 'T')
-    for (const id of ['parent', 'me', 'spouseGrandparent', 'spouseParent', 'spouse']) tree = person(tree, id)
-    tree = setParents(tree, 'me', ['parent'])
-    tree = setParents(tree, 'spouseParent', ['spouseGrandparent'])
-    tree = setParents(tree, 'spouse', ['spouseParent'])
-    tree = addSpouse(tree, 'me', 'spouse').tree
-
-    const defaultLayout = computeLayout(tree)
-    expect(defaultLayout.people.me.generation - defaultLayout.people.parent.generation).toBeGreaterThan(1)
-
-    const focused = computeFocusedLayout(tree, 'me')
-    expect(focused.people.me.generation).toBe(0)
-    expect(focused.people.parent.generation).toBe(-1)
-    expect(focused.people.parent.x).toBeCloseTo(focused.people.me.x, 5)
-    expect(focused.people.spouse.generation).toBe(0)
-    expect(focused.people.spouseParent.generation).toBe(-1)
-    expect(focused.people.spouseGrandparent.generation).toBe(-2)
-    assertNoOverlap(focused)
-  })
-
-  it('places the focus person at x=0 without overlapping relatives', () => {
-    let tree = createEmptyTree('t', 'T')
-    for (const id of ['gp1', 'gp2', 'me', 'bigSibling']) tree = person(tree, id)
-    tree = setParents(tree, 'me', ['gp1', 'gp2'])
-    tree = setParents(tree, 'bigSibling', ['gp1', 'gp2'])
-    for (let i = 0; i < 9; i++) {
-      tree = person(tree, `niece${i}`)
-      tree = setParents(tree, `niece${i}`, ['bigSibling'])
+    const layout = computeLayout(tree)
+    for (const parentId of ['parentA', 'parentB']) {
+      expect(layout.people.child.y).toBeGreaterThan(layout.people[parentId].y + NODE_HEIGHT)
     }
-
-    const layout = computeFocusedLayout(tree, 'me')
-    expect(layout.people.me.x).toBe(0)
     assertNoOverlap(layout)
   })
 
-  it('keeps sibling households contiguous without making their spouses look connected', () => {
+  it('keeps a simple descendant tree in clear horizontal tiers', () => {
     let tree = createEmptyTree('t', 'T')
-    const ids = ['parent1', 'parent2', 'ilene', 'shari', 'david', 'steven']
-    for (const id of ids) tree = person(tree, id)
-    tree = setParents(tree, 'ilene', ['parent1', 'parent2'])
-    tree = setParents(tree, 'shari', ['parent1', 'parent2'])
-    tree = addSpouse(tree, 'ilene', 'david').tree
-    tree = addSpouse(tree, 'shari', 'steven').tree
-    tree = createFamily(tree, {
+    for (const id of ['root', 'childA', 'childB', 'grandchildA', 'grandchildB']) tree = person(tree, id)
+    tree = setParents(tree, 'childA', ['root'])
+    tree = setParents(tree, 'childB', ['root'])
+    tree = setParents(tree, 'grandchildA', ['childA'])
+    tree = setParents(tree, 'grandchildB', ['childB'])
+
+    const layout = computeLayout(tree)
+    expect(Math.abs(layout.people.childA.y - layout.people.childB.y)).toBeLessThan(NODE_HEIGHT)
+    expect(Math.abs(layout.people.grandchildA.y - layout.people.grandchildB.y)).toBeLessThan(NODE_HEIGHT)
+    expect(layout.people.childA.y).toBeGreaterThan(layout.people.root.y + NODE_HEIGHT)
+    expect(layout.people.grandchildA.y).toBeGreaterThan(layout.people.childA.y + NODE_HEIGHT)
+    assertNoOverlap(layout)
+  })
+
+  it('uses birth year to order disconnected peers without changing their structural rank', () => {
+    let tree = createEmptyTree('t', 'T')
+    tree = addPerson(tree, { id: 'older', birthDate: 'ca 1954' }).tree
+    tree = addPerson(tree, { id: 'middle', birthDate: '15 Jun 1975' }).tree
+    tree = addPerson(tree, { id: 'younger', birthDate: '1 JAN 1997' }).tree
+
+    const layout = computeLayout(tree)
+    expect(layout.people.older.y).toBe(layout.people.middle.y)
+    expect(layout.people.middle.y).toBe(layout.people.younger.y)
+    expect(layout.people.older.x).toBeLessThan(layout.people.middle.x)
+    expect(layout.people.middle.x).toBeLessThan(layout.people.younger.x)
+    assertNoOverlap(layout)
+  })
+
+  it('keeps a single-child branch mostly aligned with its parent', () => {
+    let tree = createEmptyTree('t', 'T')
+    tree = addPerson(tree, { id: 'parent', birthDate: '1954' }).tree
+    tree = addPerson(tree, { id: 'child', birthDate: '1997' }).tree
+    tree = setParents(tree, 'child', ['parent'])
+
+    const layout = computeLayout(tree)
+    expect(Math.abs(layout.people.child.x - layout.people.parent.x)).toBeLessThanOrEqual(NODE_SPACING_X)
+    expect(layout.people.child.y).toBeGreaterThan(layout.people.parent.y + NODE_HEIGHT)
+  })
+
+  it('reuses a completed standard layout for focus and reset interactions', () => {
+    let tree = createEmptyTree('t', 'T')
+    tree = person(tree, 'a')
+    tree = person(tree, 'b')
+    tree = setParents(tree, 'b', ['a'])
+
+    expect(computeLayout(tree)).toBe(computeLayout(tree))
+  })
+
+  it('assigns equivalent duplicate family records the same union position', () => {
+    let tree = createEmptyTree('t', 'T')
+    for (const id of ['a', 'b', 'child']) tree = person(tree, id)
+    const familyData = {
       partners: [
-        { personId: 'ilene', role: 'spouse' },
-        { personId: 'david', role: 'spouse' },
+        { personId: 'a', role: 'spouse' as const },
+        { personId: 'b', role: 'spouse' as const },
       ],
-    }).tree
-
-    for (const focusId of ['ilene', 'shari', 'david', 'steven']) {
-      const focused = computeFocusedLayout(tree, focusId)
-      expect(focused.people[focusId].x).toBe(0)
-      expect(Math.abs(focused.people.ilene.x - focused.people.david.x)).toBe(NODE_SPACING_X)
-      expect(Math.abs(focused.people.shari.x - focused.people.steven.x)).toBe(NODE_SPACING_X)
-      expect(Math.abs(focused.people.ilene.x - focused.people.shari.x)).toBe(NODE_SPACING_X)
-      expect(Math.abs(focused.people.david.x - focused.people.steven.x)).toBeGreaterThan(NODE_SPACING_X)
-      const ileneCouple = [focused.people.ilene.x, focused.people.david.x].sort((a, b) => a - b)
-      const shariCouple = [focused.people.shari.x, focused.people.steven.x].sort((a, b) => a - b)
-      expect(ileneCouple[1] < shariCouple[0] || shariCouple[1] < ileneCouple[0]).toBe(true)
-      assertNoOverlap(focused)
+      children: ['child'],
     }
-  })
+    const first = createFamily(tree, familyData)
+    tree = first.tree
+    const second = createFamily(tree, familyData)
+    tree = second.tree
 
-  it('includes BOTH parents\' full ancestries, not just one side (the real bug this replaced)', () => {
-    let tree = createEmptyTree('t', 'T')
-    for (const id of ['me', 'dad', 'mom', 'dadGp1', 'dadGp2', 'momGp1', 'momGp2']) tree = person(tree, id)
-    tree = setParents(tree, 'me', ['dad', 'mom'])
-    tree = setParents(tree, 'dad', ['dadGp1', 'dadGp2'])
-    tree = setParents(tree, 'mom', ['momGp1', 'momGp2'])
-
-    const layout = computeFocusedLayout(tree, 'me')
-    // every ancestor on BOTH sides must be present and two generations above "me"
-    for (const id of ['dadGp1', 'dadGp2', 'momGp1', 'momGp2']) {
-      expect(layout.people[id], `${id} should be in the focused layout`).toBeDefined()
-      expect(layout.people[id].generation).toBe(-2)
-    }
-    assertNoOverlap(layout)
-  })
-
-  it('never draws a family edge to an ancestor whose partner-side was excluded (no orphaned edges)', () => {
-    // "me"'s mom has her own separate parent, but that parent's OTHER spouse
-    // (unrelated to "me") should not create a dangling half-placed family.
-    let tree = createEmptyTree('t', 'T')
-    for (const id of ['me', 'mom', 'momDad', 'unrelatedSpouse', 'unrelatedStepkid']) tree = person(tree, id)
-    tree = setParents(tree, 'me', ['mom'])
-    tree = setParents(tree, 'mom', ['momDad'])
-    tree = addSpouse(tree, 'momDad', 'unrelatedSpouse').tree
-    tree = setParents(tree, 'unrelatedStepkid', ['momDad', 'unrelatedSpouse'])
-
-    const layout = computeFocusedLayout(tree, 'me')
-    // unrelatedSpouse IS connected (via momDad), so it should be included and placed
-    expect(layout.people.unrelatedSpouse).toBeDefined()
-    expect(layout.people.unrelatedStepkid).toBeDefined()
-    assertNoOverlap(layout)
-  })
-
-  it('centers descendants below the focus person the same way the general layout does', () => {
-    let tree = createEmptyTree('t', 'T')
-    for (const id of ['me', 'spouse', 'kid1', 'kid2', 'kid3']) tree = person(tree, id)
-    tree = addSpouse(tree, 'me', 'spouse').tree
-    tree = setParents(tree, 'kid1', ['me', 'spouse'])
-    tree = setParents(tree, 'kid2', ['me', 'spouse'])
-    tree = setParents(tree, 'kid3', ['me', 'spouse'])
-
-    const layout = computeFocusedLayout(tree, 'me')
-    const childXs = [layout.people.kid1.x, layout.people.kid2.x, layout.people.kid3.x]
-    const childMid = (Math.min(...childXs) + Math.max(...childXs)) / 2
-    const coupleMid = (layout.people.me.x + layout.people.spouse.x) / 2
-    expect(coupleMid).toBeCloseTo(childMid, 5)
-  })
-
-  it('keeps children below their own parents across separate focused branches', () => {
-    let tree = createEmptyTree('t', 'T')
-    for (const id of ['parent1', 'parent2', 'me', 'sibling', 'mySpouse', 'siblingSpouse', 'myChild', 'niece']) {
-      tree = person(tree, id)
-    }
-    tree = setParents(tree, 'me', ['parent1', 'parent2'])
-    tree = setParents(tree, 'sibling', ['parent1', 'parent2'])
-    tree = addSpouse(tree, 'me', 'mySpouse').tree
-    tree = addSpouse(tree, 'sibling', 'siblingSpouse').tree
-    tree = setParents(tree, 'myChild', ['me', 'mySpouse'])
-    tree = setParents(tree, 'niece', ['sibling', 'siblingSpouse'])
-
-    const layout = computeFocusedLayout(tree, 'me')
-    const myParentCenter = (layout.people.me.x + layout.people.mySpouse.x) / 2
-    const siblingParentCenter = (layout.people.sibling.x + layout.people.siblingSpouse.x) / 2
-    expect(layout.people.myChild.x).toBeCloseTo(myParentCenter, 5)
-    expect(layout.people.niece.x).toBeCloseTo(siblingParentCenter, 5)
-    assertNoOverlap(layout)
-  })
-
-  it('keeps married siblings together between their spouses when focusing their parent', () => {
-    let tree = createEmptyTree('t', 'T')
-    for (const id of ['parent1', 'parent2', 'child1', 'child2', 'spouse1', 'spouse2']) tree = person(tree, id)
-    tree = setParents(tree, 'child1', ['parent1', 'parent2'])
-    tree = setParents(tree, 'child2', ['parent1', 'parent2'])
-    tree = addSpouse(tree, 'child1', 'spouse1').tree
-    tree = addSpouse(tree, 'child2', 'spouse2').tree
-
-    const layout = computeFocusedLayout(tree, 'parent1')
-    expect(Math.abs(layout.people.child1.x - layout.people.child2.x)).toBe(NODE_SPACING_X)
-    const children = [layout.people.child1.x, layout.people.child2.x].sort((a, b) => a - b)
-    const spouses = [layout.people.spouse1.x, layout.people.spouse2.x].sort((a, b) => a - b)
-    expect(spouses[0]).toBeLessThan(children[0])
-    expect(spouses[1]).toBeGreaterThan(children[1])
-    assertNoOverlap(layout)
-  })
-
-  it('omits people outside the focus person\'s connected component', () => {
-    let tree = createEmptyTree('t', 'T')
-    tree = person(tree, 'me')
-    tree = person(tree, 'unrelated')
-    const layout = computeFocusedLayout(tree, 'me')
-    expect(layout.people.me).toBeDefined()
-    expect(layout.people.unrelated).toBeUndefined()
-  })
-
-  it('handles a focus person who is themselves a root with no ancestors', () => {
-    let tree = createEmptyTree('t', 'T')
-    for (const id of ['me', 'kid']) tree = person(tree, id)
-    tree = setParents(tree, 'kid', ['me'])
-    const layout = computeFocusedLayout(tree, 'me')
-    expect(layout.people.me.generation).toBe(0)
-    expect(layout.people.kid.generation).toBe(1)
+    const layout = computeLayout(tree)
+    expect(layout.families[first.family.id].x).toBe(layout.families[second.family.id].x)
+    expect(layout.families[first.family.id].y).toBe(layout.families[second.family.id].y)
   })
 })

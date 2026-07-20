@@ -35,6 +35,22 @@
   --female-bg: #fdecf3;
   --unknown-border: #a8adb5;
   --unknown-bg: #f1f2f4;
+
+  --closeness-focus-border: #007f5c;
+  --closeness-focus-bg: #9ce8cf;
+  --closeness-none-border: #c7ccd2;
+  --closeness-none-bg: #f3f4f5;
+  /* Exact focus-color falloff: 100% -> 50% -> 25% -> 6.25% -> neutral. */
+  --closeness-near-border: color-mix(in srgb, var(--closeness-focus-border) 50%, var(--closeness-none-border));
+  --closeness-near-bg: color-mix(in srgb, var(--closeness-focus-bg) 50%, var(--closeness-none-bg));
+  --closeness-extended-border: color-mix(in srgb, var(--closeness-focus-border) 25%, var(--closeness-none-border));
+  --closeness-extended-bg: color-mix(in srgb, var(--closeness-focus-bg) 25%, var(--closeness-none-bg));
+  --closeness-remote-border: color-mix(in srgb, var(--closeness-focus-border) 6.25%, var(--closeness-none-border));
+  --closeness-remote-bg: color-mix(in srgb, var(--closeness-focus-bg) 6.25%, var(--closeness-none-bg));
+  --closeness-near-edge-opacity: 0.7;
+  --closeness-extended-edge-opacity: 0.46;
+  --closeness-remote-edge-opacity: 0.28;
+  --closeness-none-edge-opacity: 0.2;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -71,6 +87,16 @@
     --female-bg: #2c1f28;
     --unknown-border: #6b7178;
     --unknown-bg: #24272b;
+
+    --closeness-focus-border: #6af0c4;
+    --closeness-focus-bg: #16483b;
+    --closeness-none-border: #454b52;
+    --closeness-none-bg: #24272b;
+    /* Preserve hue falloff while keeping the structure legible on dark canvas. */
+    --closeness-near-edge-opacity: 0.92;
+    --closeness-extended-edge-opacity: 0.78;
+    --closeness-remote-edge-opacity: 0.68;
+    --closeness-none-edge-opacity: 0.58;
   }
 }
 

@@ -65,16 +65,71 @@ export function buildChildBranchPath(family: Point, children: Point[]): string {
   if (children.length === 0) return ''
   const nearestChildY = Math.min(...children.map((child) => child.y))
   const verticalGap = nearestChildY - family.y
-  const stemLength = Math.sign(verticalGap) * Math.min(32, Math.abs(verticalGap) / 3)
+  const stemLength = Math.sign(verticalGap) * Math.min(56, Math.abs(verticalGap) / 3)
   const forkY = family.y + stemLength
   const segments = [`M ${family.x} ${family.y} V ${forkY}`]
 
   for (const child of children) {
-    const startControlY = forkY + (child.y - forkY) * 0.3
-    const endControlY = forkY + (child.y - forkY) * 0.7
-    segments.push(`M ${family.x} ${forkY} C ${family.x} ${startControlY}, ${child.x} ${endControlY}, ${child.x} ${child.y}`)
+    const remainingGap = child.y - forkY
+    const terminalLength = Math.sign(remainingGap) * Math.min(42, Math.abs(remainingGap) / 4)
+    const arrivalY = child.y - terminalLength
+    const startControlY = forkY + (arrivalY - forkY) * 0.35
+    const endControlY = forkY + (arrivalY - forkY) * 0.75
+    segments.push(`M ${family.x} ${forkY} C ${family.x} ${startControlY}, ${child.x} ${endControlY}, ${child.x} ${arrivalY} V ${child.y}`)
   }
   return segments.join(' ')
+}
+
+/** Converts an orthogonal point list into an SVG path with compact quadratic
+ * corners. The first and last coordinates are retained exactly for markers. */
+export function buildRoundedOrthogonalPath(points: Point[], radius = 16): string {
+  if (points.length === 0) return ''
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`
+  const commands = [`M ${points[0].x} ${points[0].y}`]
+  for (let index = 1; index < points.length - 1; index++) {
+    const previous = points[index - 1]
+    const corner = points[index]
+    const next = points[index + 1]
+    const incomingLength = Math.abs(corner.x - previous.x) + Math.abs(corner.y - previous.y)
+    const outgoingLength = Math.abs(next.x - corner.x) + Math.abs(next.y - corner.y)
+    const cornerRadius = Math.min(radius, incomingLength / 2, outgoingLength / 2)
+    if (cornerRadius <= 0) {
+      commands.push(`L ${corner.x} ${corner.y}`)
+      continue
+    }
+    const before = {
+      x: corner.x - Math.sign(corner.x - previous.x) * cornerRadius,
+      y: corner.y - Math.sign(corner.y - previous.y) * cornerRadius,
+    }
+    const after = {
+      x: corner.x + Math.sign(next.x - corner.x) * cornerRadius,
+      y: corner.y + Math.sign(next.y - corner.y) * cornerRadius,
+    }
+    commands.push(`L ${before.x} ${before.y}`, `Q ${corner.x} ${corner.y} ${after.x} ${after.y}`)
+  }
+  const end = points[points.length - 1]
+  commands.push(`L ${end.x} ${end.y}`)
+  return commands.join(' ')
+}
+
+/** Keeps Dagre's rounded orthogonal route for local and long-rank connections, but
+ * replaces a very wide single-generation rail with a monotone curved branch. This
+ * preserves exact endpoints while avoiding a horizontal line across the canvas. */
+export function buildAdaptiveChildPath(
+  points: Point[],
+  maxHorizontalSegment = 1400,
+  maxVerticalSpan = 450,
+): string {
+  if (points.length < 2) return buildRoundedOrthogonalPath(points)
+  const first = points[0]
+  const last = points.at(-1)!
+  const longestHorizontal = Math.max(0, ...points.slice(1).map((point, index) =>
+    point.y === points[index].y ? Math.abs(point.x - points[index].x) : 0,
+  ))
+  if (longestHorizontal > maxHorizontalSegment && Math.abs(last.y - first.y) <= maxVerticalSpan) {
+    return buildChildBranchPath(first, [last])
+  }
+  return buildRoundedOrthogonalPath(points)
 }
 
 export function panUnitsPerPixel(viewBox: Pick<ViewBox, 'w' | 'h'>, viewportWidth: number, viewportHeight: number): number {

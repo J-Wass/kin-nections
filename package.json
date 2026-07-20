@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "benchmark:layout": "vite-node scripts/benchmark-layout.ts"
   },
   "devDependencies": {
     "@lucide/svelte": "^1.25.0",
@@ -24,6 +25,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
     "pdfjs-dist": "^5.4.624"
   }
 }

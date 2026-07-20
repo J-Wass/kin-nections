@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Tree } from '../lib/model/types'
-  import { focusPerson, povPersonId } from '../lib/stores/appState'
+  import { focusPerson } from '../lib/stores/appState'
   import { t } from '../lib/i18n'
   import Eye from '@lucide/svelte/icons/eye'
   import PersonAutocomplete from './PersonAutocomplete.svelte'
@@ -18,9 +18,6 @@
     focusPerson(pickedPersonId)
   }
 
-  function exitFocus() {
-    povPersonId.set(null)
-  }
 </script>
 
 <div class="pov-panel">
@@ -31,9 +28,6 @@
       <span>{$t('pov.focus')}</span>
     </button>
   </div>
-  {#if $povPersonId}
-    <button type="button" onclick={exitFocus}>{$t('pov.exit')}</button>
-  {/if}
 </div>
 
 <style>
